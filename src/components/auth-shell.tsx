@@ -1,4 +1,6 @@
+import { Suspense } from "react";
 import { Logo } from "@/components/logo";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export function AuthShell({ children }: { children: React.ReactNode }) {
   return (
@@ -10,7 +12,9 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
           Fixed bills, take-home pay and spending — one clear picture every month.
         </p>
       </div>
-      {children}
+      <Suspense fallback={<Skeleton className="h-[420px] w-full max-w-[400px] rounded-xl" />}>
+        {children}
+      </Suspense>
     </main>
   );
 }
