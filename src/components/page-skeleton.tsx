@@ -2,7 +2,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export function PageSkeleton() {
   return (
-    <div className="grid gap-6" aria-busy="true" aria-label="Loading">
+    <div className="grid gap-6" role="status" aria-busy="true" aria-label="Loading">
       <div className="grid gap-2">
         <Skeleton className="h-7 w-48" />
         <Skeleton className="h-4 w-72" />

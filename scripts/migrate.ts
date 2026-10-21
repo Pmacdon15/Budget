@@ -10,7 +10,7 @@ if (!url) {
 }
 
 const sql = neon(url);
-const schema = readFileSync(join(import.meta.dir, "../src/db/schema.sql"), "utf8");
+const schema = readFileSync(join(process.cwd(), "src/db/schema.sql"), "utf8");
 
 const statements = schema
   .split(";")
