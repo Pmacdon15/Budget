@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import type { UseMutationResult } from "@tanstack/react-query";
+import { useState } from "react";
 import { toast } from "sonner";
-import type { ActionResult } from "@/app/actions";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -14,34 +14,36 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import type { ActionError } from "@/mutations/action-error";
 
-export function ConfirmAction({
+/** A confirm dialog that runs a TanStack Query `mutation` with `variables`. */
+export function ConfirmAction<TVariables>({
   trigger,
   title,
   description,
   confirmLabel,
   successMessage,
-  action,
+  mutation,
+  variables,
 }: {
   trigger: React.ReactElement;
   title: string;
   description: string;
   confirmLabel: string;
   successMessage: string;
-  action: () => Promise<ActionResult>;
+  mutation: UseMutationResult<void, ActionError, TVariables>;
+  variables: TVariables;
 }) {
   const [open, setOpen] = useState(false);
-  const [pending, startTransition] = useTransition();
+  const pending = mutation.isPending;
 
   const confirm = () => {
-    startTransition(async () => {
-      const result = await action();
-      if (result.ok) {
+    mutation.mutate(variables, {
+      onSuccess: () => {
         setOpen(false);
         toast.success(successMessage);
-      } else {
-        toast.error(result.error);
-      }
+      },
+      onError: (error) => toast.error(error.message),
     });
   };
 

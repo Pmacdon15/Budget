@@ -1,12 +1,13 @@
 "use client";
 
-import { createFixedItem, updateFixedItem } from "@/app/actions";
 import { Input } from "@/components/ui/input";
-import type { FixedItem } from "@/lib/data";
 import { centsToInput } from "@/lib/money";
 import { monthLabel } from "@/lib/month";
+import { fixedItemSchema } from "@/lib/schemas";
+import type { FixedItem } from "@/lib/types";
+import { useSaveFixedItem } from "@/mutations/fixed-items";
 import { CategorySelect, Field, MoneyInput } from "./fields";
-import { FormDialog } from "./form-dialog";
+import { FieldError, FormDialog } from "./form-dialog";
 
 export function FixedItemDialog({
   month,
@@ -18,7 +19,7 @@ export function FixedItemDialog({
   trigger: React.ReactElement;
 }) {
   const editing = Boolean(item);
-  const action = item ? updateFixedItem.bind(null, item.id) : createFixedItem;
+  const mutation = useSaveFixedItem(item?.id);
 
   return (
     <FormDialog
@@ -31,9 +32,11 @@ export function FixedItemDialog({
       }
       submitLabel={editing ? "Save changes" : "Add bill"}
       successMessage={editing ? "Bill updated" : "Bill added"}
-      action={action}
+      schema={fixedItemSchema}
+      mutation={mutation}
     >
       <input type="hidden" name="month" value={month} />
+      <FieldError name="month" />
       <Field label="Name" htmlFor="fixed-name">
         <Input
           id="fixed-name"
@@ -43,6 +46,7 @@ export function FixedItemDialog({
           required
           autoFocus
         />
+        <FieldError name="name" />
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Amount / month" htmlFor="fixed-amount">
@@ -51,6 +55,7 @@ export function FixedItemDialog({
             name="amount"
             defaultValue={item ? centsToInput(item.amountCents) : undefined}
           />
+          <FieldError name="amount" />
         </Field>
         <Field label="Due day" htmlFor="fixed-due" hint="Optional">
           <Input
@@ -62,6 +67,7 @@ export function FixedItemDialog({
             placeholder="1–31"
             defaultValue={item?.dueDay ?? undefined}
           />
+          <FieldError name="dueDay" />
         </Field>
       </div>
       <Field label="Category" htmlFor="fixed-category">
@@ -69,6 +75,7 @@ export function FixedItemDialog({
           id="fixed-category"
           defaultValue={item?.category ?? "Housing"}
         />
+        <FieldError name="category" />
       </Field>
     </FormDialog>
   );

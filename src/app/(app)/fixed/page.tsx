@@ -24,16 +24,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { getFixedItems } from "@/dal/fixed-items";
+import { isActive } from "@/lib/budget";
 import { categoryColor } from "@/lib/categories";
-import {
-  type CategoryTotal,
-  getFixedItems,
-  isActive,
-  requireUserId,
-} from "@/lib/data";
 import { formatMoney } from "@/lib/money";
 import { monthLabel } from "@/lib/month";
 import { monthFrom, type SearchParams } from "@/lib/search-params";
+import type { CategoryTotal } from "@/lib/types";
 
 export const metadata = { title: "Fixed bills" };
 
@@ -51,8 +48,7 @@ export default function FixedPage({
 
 async function FixedBills({ searchParams }: { searchParams: SearchParams }) {
   const month = await monthFrom(searchParams);
-  const userId = await requireUserId();
-  const all = await getFixedItems(userId);
+  const all = await getFixedItems();
   const active = all
     .filter((item) => isActive(item, month))
     .sort((a, b) => b.amountCents - a.amountCents);

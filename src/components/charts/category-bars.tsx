@@ -8,8 +8,8 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 import { categoryColor } from "@/lib/categories";
-import type { CategoryTotal } from "@/lib/data";
 import { formatMoney, formatMoneyCompact } from "@/lib/money";
+import type { CategoryTotal } from "@/lib/types";
 
 const config = { total: { label: "Spent" } } satisfies ChartConfig;
 

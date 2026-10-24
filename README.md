@@ -12,6 +12,25 @@ A personal monthly budgeting app — live at **[budget.patmac.ca](https://budget
 
 Next.js 16 (App Router, `src/`, React Compiler, Cache Components) · TypeScript · Tailwind CSS v4 · shadcn/ui (Base UI) + Recharts · Biome · Bun · Clerk (auth) · Neon Postgres.
 
+## Architecture
+
+Reads and writes each go through one path, and Zod validates on both sides of the network:
+
+```
+Reads:   page (server component) → DAL → DB functions → Neon
+Writes:  form (Zod) → TanStack Query mutation → server action (Zod) → DAL → DB functions → Neon
+```
+
+| Layer | Folder | Job |
+| --- | --- | --- |
+| Schemas | `src/lib/schemas.ts` | Zod schemas shared by forms and server actions |
+| Mutations | `src/mutations/` | `useMutation` hooks that call server actions |
+| Server actions | `src/actions/` | Re-validate input with Zod, call the DAL, revalidate the app |
+| DAL | `src/dal/` | Auth (Clerk user), ownership checks and business rules |
+| DB functions | `src/db/` | Raw SQL only, no auth or rules |
+
+Pure budget math lives in `src/lib/budget.ts` and shared types in `src/lib/types.ts`, so client components never import server code.
+
 ## Setup
 
 Required environment variables (Vercel sets these when the Clerk and Neon integrations are connected to the project):

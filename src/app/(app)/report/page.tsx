@@ -22,8 +22,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { getMonthOverview } from "@/dal/overview";
 import { categoryColor } from "@/lib/categories";
-import { getMonthOverview } from "@/lib/data";
 import { formatMoney, formatPercent } from "@/lib/money";
 import { monthLabel } from "@/lib/month";
 import { monthFrom, type SearchParams } from "@/lib/search-params";

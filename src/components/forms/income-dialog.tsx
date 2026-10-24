@@ -1,12 +1,13 @@
 "use client";
 
-import { createIncome, updateIncome } from "@/app/actions";
 import { Input } from "@/components/ui/input";
-import type { IncomeEntry } from "@/lib/data";
 import { centsToInput } from "@/lib/money";
 import { firstDayOf, lastDayOf, monthLabel } from "@/lib/month";
+import { incomeSchema } from "@/lib/schemas";
+import type { IncomeEntry } from "@/lib/types";
+import { useSaveIncome } from "@/mutations/income";
 import { Field, MoneyInput } from "./fields";
-import { FormDialog } from "./form-dialog";
+import { FieldError, FormDialog } from "./form-dialog";
 
 export function IncomeDialog({
   month,
@@ -21,7 +22,7 @@ export function IncomeDialog({
   trigger: React.ReactElement;
 }) {
   const editing = Boolean(entry);
-  const action = entry ? updateIncome.bind(null, entry.id) : createIncome;
+  const mutation = useSaveIncome(entry?.id);
   const label = entry?.label ?? suggestion?.label;
   const amount = entry?.amountCents ?? suggestion?.amountCents;
 
@@ -32,9 +33,11 @@ export function IncomeDialog({
       description={`Net pay that landed in your account for ${monthLabel(entry?.month ?? month)}. Add each paycheque separately if you're paid more than once.`}
       submitLabel={editing ? "Save changes" : "Add take-home"}
       successMessage={editing ? "Take-home updated" : "Take-home added"}
-      action={action}
+      schema={incomeSchema}
+      mutation={mutation}
     >
       <input type="hidden" name="month" value={entry?.month ?? month} />
+      <FieldError name="month" />
       <Field label="Source" htmlFor="income-label">
         <Input
           id="income-label"
@@ -43,6 +46,7 @@ export function IncomeDialog({
           defaultValue={label}
           required
         />
+        <FieldError name="label" />
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Amount (net)" htmlFor="income-amount">
@@ -54,6 +58,7 @@ export function IncomeDialog({
               amount !== undefined ? centsToInput(amount) : undefined
             }
           />
+          <FieldError name="amount" />
         </Field>
         <Field label="Received" htmlFor="income-date" hint="Optional">
           <Input
@@ -64,6 +69,7 @@ export function IncomeDialog({
             max={lastDayOf(entry?.month ?? month)}
             defaultValue={entry?.receivedOn ?? undefined}
           />
+          <FieldError name="receivedOn" />
         </Field>
       </div>
     </FormDialog>

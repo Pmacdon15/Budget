@@ -7,8 +7,8 @@ import {
   ChartTooltip,
 } from "@/components/ui/chart";
 import { categoryColor } from "@/lib/categories";
-import type { CategoryTotal } from "@/lib/data";
 import { formatMoney, formatMoneyCompact } from "@/lib/money";
+import type { CategoryTotal } from "@/lib/types";
 
 export function SpendingDonut({ categories }: { categories: CategoryTotal[] }) {
   const data = categories.map((c) => ({

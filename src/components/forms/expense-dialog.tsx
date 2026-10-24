@@ -1,12 +1,13 @@
 "use client";
 
-import { createExpense, updateExpense } from "@/app/actions";
 import { Input } from "@/components/ui/input";
-import type { Expense } from "@/lib/data";
 import { centsToInput } from "@/lib/money";
 import { currentMonth, today } from "@/lib/month";
+import { expenseSchema } from "@/lib/schemas";
+import type { Expense } from "@/lib/types";
+import { useSaveExpense } from "@/mutations/expenses";
 import { CategorySelect, Field, MoneyInput } from "./fields";
-import { FormDialog } from "./form-dialog";
+import { FieldError, FormDialog } from "./form-dialog";
 
 export function ExpenseDialog({
   month,
@@ -18,7 +19,7 @@ export function ExpenseDialog({
   trigger: React.ReactElement;
 }) {
   const editing = Boolean(expense);
-  const action = expense ? updateExpense.bind(null, expense.id) : createExpense;
+  const mutation = useSaveExpense(expense?.id);
   const defaultDate =
     expense?.spentOn ?? (month === currentMonth() ? today() : `${month}-01`);
 
@@ -29,7 +30,8 @@ export function ExpenseDialog({
       description="One-off spending like groceries, gas or a night out."
       submitLabel={editing ? "Save changes" : "Add expense"}
       successMessage={editing ? "Expense updated" : "Expense added"}
-      action={action}
+      schema={expenseSchema}
+      mutation={mutation}
     >
       <Field label="Description" htmlFor="expense-description">
         <Input
@@ -40,6 +42,7 @@ export function ExpenseDialog({
           required
           autoFocus
         />
+        <FieldError name="description" />
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Amount" htmlFor="expense-amount">
@@ -50,6 +53,7 @@ export function ExpenseDialog({
               expense ? centsToInput(expense.amountCents) : undefined
             }
           />
+          <FieldError name="amount" />
         </Field>
         <Field label="Date" htmlFor="expense-date">
           <Input
@@ -59,6 +63,7 @@ export function ExpenseDialog({
             required
             defaultValue={defaultDate}
           />
+          <FieldError name="spentOn" />
         </Field>
       </div>
       <Field label="Category" htmlFor="expense-category">
@@ -66,6 +71,7 @@ export function ExpenseDialog({
           id="expense-category"
           defaultValue={expense?.category ?? "Groceries"}
         />
+        <FieldError name="category" />
       </Field>
     </FormDialog>
   );

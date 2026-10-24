@@ -1,4 +1,4 @@
-import { getMonthOverview } from "@/lib/data";
+import { getMonthOverview } from "@/dal/overview";
 import { resolveMonth } from "@/lib/month";
 
 const cell = (value: string | number) => {
