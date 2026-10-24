@@ -36,3 +36,25 @@ create table if not exists expenses (
   created_at timestamptz not null default now()
 );
 create index if not exists expenses_user_month_idx on expenses (user_id, month);
+
+-- Scanned receipts. One row per photo that was saved with an expense. The
+-- expense keeps its own description, amount and category (what the user
+-- confirmed), and this keeps what was read off the paper.
+-- image_pathname is the photo's pathname in the private Vercel Blob store
+-- (receipts/<user_id>/<uuid>.jpg), never a public URL.
+create table if not exists receipts (
+  id uuid primary key default gen_random_uuid(),
+  user_id text not null,
+  merchant text,
+  purchased_on date,
+  subtotal_cents integer check (subtotal_cents >= 0),
+  tax_cents integer check (tax_cents >= 0),
+  total_cents integer check (total_cents >= 0),
+  raw_text text,
+  image_pathname text,
+  created_at timestamptz not null default now()
+);
+create index if not exists receipts_user_idx on receipts (user_id);
+
+alter table expenses add column if not exists receipt_id uuid references receipts (id) on delete set null;
+create index if not exists expenses_receipt_idx on expenses (receipt_id);

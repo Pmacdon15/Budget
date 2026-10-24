@@ -32,7 +32,7 @@ export function testPg() {
 }
 
 export async function resetTestDb() {
-  await testPg().exec("truncate fixed_items, income, expenses");
+  await testPg().exec("truncate fixed_items, income, expenses, receipts");
 }
 
 function toQuery(strings: TemplateStringsArray, values: unknown[]): Query {

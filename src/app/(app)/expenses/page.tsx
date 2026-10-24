@@ -1,12 +1,14 @@
-import { Plus, Receipt } from "lucide-react";
+import { Paperclip, Plus, Receipt } from "lucide-react";
 import { Suspense } from "react";
 import { CategoryBars } from "@/components/charts/category-bars";
 import { Delta } from "@/components/delta";
 import { EmptyState } from "@/components/empty-state";
 import { ExpenseActions } from "@/components/expense-actions";
+import { ExportDialog } from "@/components/export-dialog";
 import { ExpenseDialog } from "@/components/forms/expense-dialog";
 import { PageHeader } from "@/components/page-header";
 import { PageSkeleton } from "@/components/page-skeleton";
+import { ScanReceiptButton } from "@/components/scan-receipt-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -71,6 +73,8 @@ async function Expenses({ searchParams }: { searchParams: SearchParams }) {
         title="Spending"
         description={`One-off expenses in ${monthLabel(month)} — everything that isn't a fixed bill.`}
       >
+        <ExportDialog month={month} />
+        <ScanReceiptButton month={month} />
         <ExpenseDialog
           month={month}
           trigger={
@@ -85,8 +89,9 @@ async function Expenses({ searchParams }: { searchParams: SearchParams }) {
         <EmptyState
           icon={Receipt}
           title={`No spending logged for ${monthLabel(month)}`}
-          description="Groceries, gas, dinners out — add them as you go and they'll show up in your report."
+          description="Groceries, gas, dinners out — scan a receipt or add them as you go and they'll show up in your report."
         >
+          <ScanReceiptButton month={month} />
           <ExpenseDialog
             month={month}
             trigger={<Button>Add an expense</Button>}
@@ -133,6 +138,18 @@ async function Expenses({ searchParams }: { searchParams: SearchParams }) {
                           <span className="font-medium">
                             {expense.description}
                           </span>
+                          {expense.receiptId ? (
+                            <a
+                              href={`/api/receipts/${expense.receiptId}/image`}
+                              target="_blank"
+                              rel="noopener"
+                              className="text-muted-foreground hover:text-foreground"
+                              aria-label={`View receipt for ${expense.description}`}
+                              title="View receipt"
+                            >
+                              <Paperclip className="size-3.5" />
+                            </a>
+                          ) : null}
                         </div>
                         <div className="mt-0.5 text-muted-foreground text-xs tabular-nums">
                           {expense.spentOn}
