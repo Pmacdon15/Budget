@@ -55,6 +55,15 @@ export default defineConfig({
           hookTimeout: 30_000,
         },
       },
+      {
+        // Reads `.next/` after `next build`; see tests/build/static-shell.test.ts.
+        extends: true,
+        test: {
+          name: "build",
+          environment: "node",
+          include: ["tests/build/**/*.test.ts"],
+        },
+      },
     ],
   },
 });

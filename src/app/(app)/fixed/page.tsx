@@ -5,7 +5,11 @@ import { EmptyState } from "@/components/empty-state";
 import { FixedItemActions } from "@/components/fixed-item-actions";
 import { FixedItemDialog } from "@/components/forms/fixed-item-dialog";
 import { PageHeader } from "@/components/page-header";
-import { PageSkeleton } from "@/components/page-skeleton";
+import {
+  ActionsSkeleton,
+  SplitCardsSkeleton,
+  TextSkeleton,
+} from "@/components/skeletons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,20 +38,54 @@ import type { CategoryTotal } from "@/lib/types";
 
 export const metadata = { title: "Fixed bills" };
 
+/*
+ * Not async: the heading is in the static shell. The month name, the add
+ * button and the list each wait in their own `<Suspense>` hole.
+ */
 export default function FixedPage({
   searchParams,
 }: {
   searchParams: SearchParams;
 }) {
+  const month = monthFrom(searchParams);
+
   return (
-    <Suspense fallback={<PageSkeleton />}>
-      <FixedBills searchParams={searchParams} />
-    </Suspense>
+    <>
+      <PageHeader
+        title="Fixed bills"
+        description={
+          <>
+            Bills that repeat every month. Showing what's active in{" "}
+            <Suspense fallback={<TextSkeleton className="w-24" />}>
+              {month.then((m) => monthLabel(m))}
+            </Suspense>
+            .
+          </>
+        }
+      >
+        <Suspense fallback={<ActionsSkeleton count={1} />}>
+          {month.then((m) => (
+            <FixedItemDialog
+              month={m}
+              trigger={
+                <Button>
+                  <Plus /> Add bill
+                </Button>
+              }
+            />
+          ))}
+        </Suspense>
+      </PageHeader>
+
+      <Suspense fallback={<SplitCardsSkeleton />}>
+        <FixedBills month={month} />
+      </Suspense>
+    </>
   );
 }
 
-async function FixedBills({ searchParams }: { searchParams: SearchParams }) {
-  const month = await monthFrom(searchParams);
+async function FixedBills({ month: monthPromise }: { month: Promise<string> }) {
+  const month = await monthPromise;
   const all = await getFixedItems();
   const active = all
     .filter((item) => isActive(item, month))
@@ -72,20 +110,6 @@ async function FixedBills({ searchParams }: { searchParams: SearchParams }) {
 
   return (
     <>
-      <PageHeader
-        title="Fixed bills"
-        description={`Bills that repeat every month. Showing what's active in ${monthLabel(month)}.`}
-      >
-        <FixedItemDialog
-          month={month}
-          trigger={
-            <Button>
-              <Plus /> Add bill
-            </Button>
-          }
-        />
-      </PageHeader>
-
       {active.length === 0 ? (
         <EmptyState
           icon={CalendarRange}

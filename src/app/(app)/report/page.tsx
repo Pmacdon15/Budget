@@ -3,8 +3,8 @@ import { Suspense } from "react";
 import { CategoryBars } from "@/components/charts/category-bars";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
-import { PageSkeleton } from "@/components/page-skeleton";
 import { PrintButton } from "@/components/print-button";
+import { SplitCardsSkeleton, TextSkeleton } from "@/components/skeletons";
 import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
@@ -31,15 +31,55 @@ import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Monthly report" };
 
+/*
+ * Not async: the heading, description and print button are in the static
+ * shell. The month name, the CSV link and the report body each wait in their
+ * own `<Suspense>` hole.
+ */
 export default function ReportPage({
   searchParams,
 }: {
   searchParams: SearchParams;
 }) {
+  const month = monthFrom(searchParams);
+  const csvClass = cn(buttonVariants({ variant: "outline" }), "print:hidden");
+
   return (
-    <Suspense fallback={<PageSkeleton />}>
-      <Report searchParams={searchParams} />
-    </Suspense>
+    <>
+      <PageHeader
+        title={
+          <>
+            <Suspense fallback={<TextSkeleton className="w-40" />}>
+              {month.then((m) => monthLabel(m))}
+            </Suspense>{" "}
+            report
+          </>
+        }
+        description="A full summary of the month: income, bills, spending and what was left."
+      >
+        {/* Without `?month=` the CSV route uses the current month. */}
+        <Suspense
+          fallback={
+            <a href="/report/csv" className={csvClass}>
+              <Download /> CSV
+            </a>
+          }
+        >
+          {month.then((m) => (
+            <a href={`/report/csv?month=${m}`} className={csvClass}>
+              <Download /> CSV
+            </a>
+          ))}
+        </Suspense>
+        <div className="print:hidden">
+          <PrintButton />
+        </div>
+      </PageHeader>
+
+      <Suspense fallback={<SplitCardsSkeleton />}>
+        <Report month={month} />
+      </Suspense>
+    </>
   );
 }
 
@@ -69,8 +109,8 @@ function Change({
   );
 }
 
-async function Report({ searchParams }: { searchParams: SearchParams }) {
-  const month = await monthFrom(searchParams);
+async function Report({ month: monthPromise }: { month: Promise<string> }) {
+  const month = await monthPromise;
   const overview = await getMonthOverview(month);
   const {
     current,
@@ -132,21 +172,6 @@ async function Report({ searchParams }: { searchParams: SearchParams }) {
 
   return (
     <>
-      <PageHeader
-        title={`${monthLabel(month)} report`}
-        description="A full summary of the month: income, bills, spending and what was left."
-      >
-        <a
-          href={`/report/csv?month=${month}`}
-          className={cn(buttonVariants({ variant: "outline" }), "print:hidden")}
-        >
-          <Download /> CSV
-        </a>
-        <div className="print:hidden">
-          <PrintButton />
-        </div>
-      </PageHeader>
-
       {!hasData ? (
         <EmptyState
           icon={FileText}

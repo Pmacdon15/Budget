@@ -7,9 +7,9 @@ import { Delta } from "@/components/delta";
 import { EmptyState } from "@/components/empty-state";
 import { Logo } from "@/components/logo";
 import { PageHeader } from "@/components/page-header";
-import { PageSkeleton } from "@/components/page-skeleton";
 import { PrintButton } from "@/components/print-button";
 import { Providers } from "@/components/providers";
+import { StatCardSkeleton, TextSkeleton } from "@/components/skeletons";
 import { StatCard } from "@/components/stat-card";
 
 describe("Delta", () => {
@@ -116,11 +116,19 @@ describe("PageHeader", () => {
   });
 });
 
-describe("PageSkeleton", () => {
-  it("announces that the page is loading", () => {
-    render(<PageSkeleton />);
-    const status = screen.getByRole("status", { name: "Loading" });
-    expect(status).toHaveAttribute("aria-busy", "true");
+describe("Skeletons", () => {
+  it("keeps a stat card's label in the static shell while its number loads", () => {
+    const { container } = render(
+      <StatCardSkeleton label="Take-home" icon={Wallet} />,
+    );
+    expect(screen.getByText("Take-home")).toBeInTheDocument();
+    expect(container.querySelector("[aria-busy=true]")).not.toBeNull();
+    expect(container.querySelector("svg")).not.toBeNull();
+  });
+
+  it("sizes a text placeholder inline", () => {
+    const { container } = render(<TextSkeleton className="w-24" />);
+    expect(container.firstChild).toHaveClass("inline-block", "w-24");
   });
 });
 
