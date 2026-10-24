@@ -46,7 +46,12 @@ export type ScannedFields = {
   taxCents?: number;
   category?: Category;
   rawText?: string;
+  /** Set when the items span two or more categories; adds up to the total. */
+  splits?: ReceiptSplit[];
 };
+
+/** One category's share of a receipt. */
+export type ReceiptSplit = { category: Category; amountCents: number };
 
 export type ScanResult = { recognised: boolean; fields: ScannedFields };
 

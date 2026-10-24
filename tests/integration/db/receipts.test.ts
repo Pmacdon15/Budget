@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   deleteExpenseRow,
   insertExpense,
+  insertExpenseLines,
   insertExpenseWithReceipt,
   selectExpensesBetween,
   selectExpensesForExport,
@@ -154,6 +155,73 @@ describe("db/expenses with receipts", () => {
           imagePathname: null,
         },
       ]);
+    });
+  });
+});
+
+describe("split receipts", () => {
+  const base = {
+    month: "2026-10",
+    spentOn: "2026-10-05",
+    description: "Superstore",
+  };
+  const lines = [
+    { category: "Groceries", amountCents: 8_000 },
+    { category: "Alcohol", amountCents: 3_300 },
+  ];
+
+  it("saves one expense per part, all linked to the one receipt", async () => {
+    await insertExpenseLines("user_a", base, lines, receipt);
+    const saved = await selectExpensesBetween("user_a", "2026-10", "2026-10");
+    expect(saved.map((e) => [e.category, e.amountCents]).sort()).toEqual([
+      ["Alcohol", 3_300],
+      ["Groceries", 8_000],
+    ]);
+    expect(new Set(saved.map((e) => e.receiptId)).size).toBe(1);
+    expect(await rows("select id from receipts")).toHaveLength(1);
+  });
+
+  it("saves split parts without a receipt too", async () => {
+    await insertExpenseLines("user_a", base, lines, null);
+    const saved = await selectExpensesBetween("user_a", "2026-10", "2026-10");
+    expect(saved).toHaveLength(2);
+    expect(saved.every((e) => e.receiptId === null)).toBe(true);
+  });
+
+  it("keeps the receipt until its last part is deleted", async () => {
+    await insertExpenseLines("user_a", base, lines, receipt);
+    const [first, second] = await selectExpensesBetween(
+      "user_a",
+      "2026-10",
+      "2026-10",
+    );
+
+    expect(await deleteExpenseRow("user_a", first?.id as string)).toEqual({
+      imagePathname: null,
+    });
+    expect(await rows("select id from receipts")).toHaveLength(1);
+
+    expect(await deleteExpenseRow("user_a", second?.id as string)).toEqual({
+      imagePathname: receipt.imagePathname,
+    });
+    expect(await rows("select id from receipts")).toEqual([]);
+  });
+
+  it("shares the receipt's subtotal and tax across the parts in a download", async () => {
+    await insertExpenseLines("user_a", base, lines, receipt);
+    const found = await selectExpensesForExport(
+      "user_a",
+      "2026-10",
+      "2026-10",
+      ["Groceries", "Alcohol"],
+    );
+    const byCategory = Object.fromEntries(
+      found.map((r) => [r.category, [r.subtotalCents, r.taxCents]]),
+    );
+    // 10,000 subtotal and 1,300 tax, split 80/33 of 113.
+    expect(byCategory).toEqual({
+      Groceries: [7_080, 920],
+      Alcohol: [2_920, 380],
     });
   });
 });

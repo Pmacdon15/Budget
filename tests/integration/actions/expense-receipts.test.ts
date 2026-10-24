@@ -111,4 +111,69 @@ describe("saving a scanned receipt", () => {
     await deleteExpense(expense?.id as string);
     expect(deleteReceiptImage).not.toHaveBeenCalled();
   });
+
+  it("saves a split receipt as one expense per category", async () => {
+    expect(
+      await createExpense({
+        ...scanned,
+        category: "Groceries",
+        splits: JSON.stringify([
+          { category: "Groceries", amount: "80.00" },
+          { category: "Alcohol", amount: "33.00" },
+        ]),
+      }),
+    ).toEqual({ ok: true });
+
+    const saved = await rows(
+      "select description, category, amount_cents, receipt_id from expenses order by amount_cents desc",
+    );
+    const [receipt] = await rows("select id from receipts");
+    expect(saved).toEqual([
+      {
+        description: "Costco",
+        category: "Groceries",
+        amount_cents: 8_000,
+        receipt_id: receipt?.id,
+      },
+      {
+        description: "Costco",
+        category: "Alcohol",
+        amount_cents: 3_300,
+        receipt_id: receipt?.id,
+      },
+    ]);
+  });
+
+  it("refuses a split that doesn't match the total", async () => {
+    const result = await createExpense({
+      ...scanned,
+      splits: JSON.stringify([
+        { category: "Groceries", amount: "80.00" },
+        { category: "Alcohol", amount: "30.00" },
+      ]),
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      fieldErrors: {
+        splits: ["The parts add up to $110.00 but the total is $113.00"],
+      },
+    });
+    expect(await rows("select id from expenses")).toEqual([]);
+    expect(await rows("select id from receipts")).toEqual([]);
+  });
+
+  it("only removes a split receipt's photo with its last part", async () => {
+    await createExpense({
+      ...scanned,
+      splits: JSON.stringify([
+        { category: "Groceries", amount: "80.00" },
+        { category: "Alcohol", amount: "33.00" },
+      ]),
+    });
+    const [first, second] = await rows("select id from expenses");
+    await deleteExpense(first?.id as string);
+    expect(deleteReceiptImage).not.toHaveBeenCalled();
+    await deleteExpense(second?.id as string);
+    expect(deleteReceiptImage).toHaveBeenCalledWith(OWN_PHOTO);
+  });
 });

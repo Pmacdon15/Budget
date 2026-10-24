@@ -278,3 +278,135 @@ describe("ExportDialog", () => {
     );
   });
 });
+
+describe("splitting a receipt across categories", () => {
+  it("opens with the AI's split and saves it", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(
+      <ExpenseDialog
+        month="2026-10"
+        open
+        scan={scan({
+          fields: {
+            merchant: "Superstore",
+            totalCents: 11_300,
+            category: "Groceries",
+            splits: [
+              { category: "Groceries", amountCents: 8_000 },
+              { category: "Alcohol", amountCents: 3_300 },
+            ],
+          },
+        })}
+      />,
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Split across categories");
+    expect(within(dialog).getByLabelText("Part 1 amount")).toHaveValue("80.00");
+    expect(within(dialog).getByLabelText("Part 2 amount")).toHaveValue("33.00");
+    expect(dialog).toHaveTextContent("Fully split");
+    expect(within(dialog).queryByLabelText("Category")).toBeNull();
+
+    await user.click(
+      within(dialog).getByRole("button", { name: "Add expense" }),
+    );
+    await waitFor(() =>
+      expect(expenseActions.createExpense).toHaveBeenCalledWith(
+        expect.objectContaining({
+          amount: "113.00",
+          category: "Groceries",
+          splits: JSON.stringify([
+            { category: "Groceries", amount: "80.00" },
+            { category: "Alcohol", amount: "33.00" },
+          ]),
+        }),
+      ),
+    );
+  });
+
+  it("lets a typed-in expense be split, and checks the parts add up", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(
+      <ExpenseDialog
+        month="2026-10"
+        trigger={<button type="button">Add</button>}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    const dialog = await screen.findByRole("dialog");
+
+    await user.type(within(dialog).getByLabelText("Description"), "Superstore");
+    await user.type(within(dialog).getByLabelText("Amount"), "50.00");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Split across categories" }),
+    );
+
+    const first = within(dialog).getByLabelText("Part 1 amount");
+    expect(first).toHaveValue("50.00");
+    await user.clear(first);
+    await user.type(first, "40");
+    expect(dialog).toHaveTextContent("$10.00 left to split");
+
+    await user.click(
+      within(dialog).getByRole("button", { name: "Add expense" }),
+    );
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(
+      "Enter a valid amount, like 1250.00",
+    );
+    expect(expenseActions.createExpense).not.toHaveBeenCalled();
+
+    await user.type(within(dialog).getByLabelText("Part 2 amount"), "12");
+    expect(dialog).toHaveTextContent("$2.00 over the total");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Add expense" }),
+    );
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(
+      "The parts add up to $52.00 but the total is $50.00",
+    );
+
+    await user.clear(within(dialog).getByLabelText("Part 2 amount"));
+    await user.type(within(dialog).getByLabelText("Part 2 amount"), "10");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Add a category" }),
+    );
+    expect(within(dialog).getByLabelText("Part 3 amount")).toHaveValue("");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Remove part 3" }),
+    );
+
+    await user.click(
+      within(dialog).getByRole("button", { name: "Add expense" }),
+    );
+    await waitFor(() =>
+      expect(expenseActions.createExpense).toHaveBeenCalledWith(
+        expect.objectContaining({
+          amount: "50.00",
+          category: "Groceries",
+          splits: JSON.stringify([
+            { category: "Groceries", amount: "40" },
+            { category: "Alcohol", amount: "10" },
+          ]),
+        }),
+      ),
+    );
+  });
+
+  it("can go back to a single category", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(
+      <ExpenseDialog
+        month="2026-10"
+        trigger={<button type="button">Add</button>}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Split across categories" }),
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "One category" }),
+    );
+    expect(within(dialog).getByLabelText("Category")).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText("Part 1 amount")).toBeNull();
+  });
+});

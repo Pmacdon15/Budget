@@ -4,8 +4,8 @@ A personal monthly budgeting app — live at **[budget.patmac.ca](https://budget
 
 - **Fixed bills** — rent, phone, insurance, subscriptions. Enter once, they repeat every month. Changing an amount applies from the month you're viewing onward, so past months and reports stay accurate.
 - **Take-home** — record what actually landed each month (one entry per paycheque). Shows a rolling 3-month average and a 12-month trend.
-- **Spending** — one-off expenses by category.
-  - **Scan receipt** — snap or pick a photo; AI reads the store, date, total, tax and category and pre-fills the expense for you to confirm. The photo and everything read off it are saved with the expense (📎 opens it).
+- **Spending** — one-off expenses by category (including Auto, Food and Alcohol).
+  - **Scan receipt** — snap or pick a photo; AI reads the store, date, total, tax and category and pre-fills the expense for you to confirm. A receipt with things from several categories (groceries and beer, say) is split into one expense per category; the AI suggests the split and you can adjust it. Any new expense can be split by hand too. The photo and everything read off it are saved with the expense (📎 opens it).
   - **Download** — expenses as **CSV**, **Excel** or **PDF** for any month range, with checkboxes to choose the categories. PDFs can include the receipt photos.
 - **Overview** — this month at a glance: take-home, bills, spending, what's left, a 12-month history chart and a category breakdown.
 - **Monthly report** — summary vs. last month and your 12-month average, category breakdown, every line item, plus **Print / PDF** and **CSV** export.

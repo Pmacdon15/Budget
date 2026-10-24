@@ -460,8 +460,23 @@ async function addPhotos(
   rows: ExpenseExportRow[],
   loadPhoto: (pathname: string) => Promise<Uint8Array | null>,
 ) {
+  // A split receipt is several rows sharing one photo; print it once, with
+  // the parts' combined amount and every category it was split into.
+  const parts = new Map<string, { cents: number; categories: string[] }>();
+  for (const r of rows) {
+    if (!r.imagePathname) continue;
+    const entry = parts.get(r.imagePathname) ?? { cents: 0, categories: [] };
+    entry.cents += r.amountCents;
+    entry.categories.push(r.category);
+    parts.set(r.imagePathname, entry);
+  }
+  const seen = new Set<string>();
   const withPhotos = rows
-    .filter((r) => r.imagePathname)
+    .filter((r) => {
+      if (!r.imagePathname || seen.has(r.imagePathname)) return false;
+      seen.add(r.imagePathname);
+      return true;
+    })
     .slice(0, MAX_PDF_PHOTOS);
   for (const row of withPhotos) {
     let bytes: Uint8Array | null = null;
@@ -485,14 +500,23 @@ async function addPhotos(
       font: w.bold,
       width: PAGE.width - 2 * MARGIN - 110,
     });
-    w.text(formatMoney(row.amountCents), PAGE.width - MARGIN - 110, {
-      size: 12,
-      font: w.bold,
-      width: 110,
-      align: "right",
-    });
+    const part = parts.get(row.imagePathname as string);
+    w.text(
+      formatMoney(part?.cents ?? row.amountCents),
+      PAGE.width - MARGIN - 110,
+      {
+        size: 12,
+        font: w.bold,
+        width: 110,
+        align: "right",
+      },
+    );
     w.y -= 16;
-    w.text(row.category, MARGIN, { size: 9, color: MUTED });
+    w.text((part?.categories ?? [row.category]).join(", "), MARGIN, {
+      size: 9,
+      color: MUTED,
+      width: PAGE.width - 2 * MARGIN,
+    });
     w.y -= 14;
 
     const maxWidth = PAGE.width - 2 * MARGIN;

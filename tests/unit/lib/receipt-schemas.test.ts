@@ -23,6 +23,7 @@ describe("expenseWithReceiptSchema", () => {
       receiptTax: null,
       receiptTotal: null,
       receiptText: null,
+      splits: null,
     });
   });
 
@@ -96,5 +97,90 @@ describe("expenseExportSchema", () => {
     const result = expenseExportSchema.safeParse({ ...valid, ...change });
     expect(result.success).toBe(false);
     expect(result.error?.issues[0]?.message).toBe(message);
+  });
+});
+
+describe("expense splits", () => {
+  const expense = {
+    description: "Superstore",
+    category: "Groceries",
+    amount: "113.00",
+    spentOn: "2026-10-05",
+  };
+  const splits = (lines: unknown) => ({
+    ...expense,
+    splits: JSON.stringify(lines),
+  });
+  const message = (values: unknown) =>
+    expenseWithReceiptSchema.safeParse(values).error?.issues[0];
+
+  it("parses parts that add up to the total", () => {
+    expect(
+      expenseWithReceiptSchema.parse(
+        splits([
+          { category: "Groceries", amount: "80.00" },
+          { category: "Alcohol", amount: "$33" },
+        ]),
+      ).splits,
+    ).toEqual([
+      { category: "Groceries", amountCents: 8_000 },
+      { category: "Alcohol", amountCents: 3_300 },
+    ]);
+    expect(expenseWithReceiptSchema.parse(expense).splits).toBeNull();
+    expect(
+      expenseWithReceiptSchema.parse({ ...expense, splits: "" }).splits,
+    ).toBeNull();
+  });
+
+  it.each([
+    [
+      [
+        { category: "Groceries", amount: "80.00" },
+        { category: "Alcohol", amount: "30.00" },
+      ],
+      "The parts add up to $110.00 but the total is $113.00",
+    ],
+    [
+      [{ category: "Groceries", amount: "113.00" }],
+      "Split into at least two categories",
+    ],
+    [
+      [
+        { category: "Groceries", amount: "80.00" },
+        { category: "Groceries", amount: "33.00" },
+      ],
+      "Use each category once",
+    ],
+    [
+      [
+        { category: "Groceries", amount: "113.00" },
+        { category: "Alcohol", amount: "" },
+      ],
+      "Enter a valid amount, like 1250.00",
+    ],
+    [
+      [
+        { category: "Groceries", amount: "113.00" },
+        { category: "Alcohol", amount: "0" },
+      ],
+      "Each part needs an amount",
+    ],
+    [
+      [
+        { category: "Groceries", amount: "80.00" },
+        { category: "Yachts", amount: "33.00" },
+      ],
+      "Pick a category",
+    ],
+  ])("rejects %j", (lines, expected) => {
+    const issue = message(splits(lines));
+    expect(issue?.message).toBe(expected);
+    expect(issue?.path).toEqual(["splits"]);
+  });
+
+  it("rejects a mangled split", () => {
+    expect(message({ ...expense, splits: "{oops" })?.message).toBe(
+      "Check the split amounts",
+    );
   });
 });

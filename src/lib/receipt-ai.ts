@@ -1,8 +1,8 @@
 import "server-only";
 import { getVercelOidcToken } from "@vercel/oidc";
-import { CATEGORIES, CATEGORY_NAMES, type Category } from "@/lib/categories";
+import { CATEGORIES, CATEGORY_NAMES, isCategory } from "@/lib/categories";
 import { parseMoney } from "@/lib/money";
-import type { ScannedFields, ScanResult } from "@/lib/types";
+import type { ReceiptSplit, ScannedFields, ScanResult } from "@/lib/types";
 
 /**
  * Reads a receipt photo with Claude's vision model.
@@ -39,7 +39,9 @@ export type { ScannedFields, ScanResult };
 
 export const NOT_RECOGNISED: ScanResult = { recognised: false, fields: {} };
 
-const CATEGORY_GUIDE = CATEGORIES.map((c) => `- ${c.name}`).join("\n");
+const CATEGORY_GUIDE = CATEGORIES.map((c) => `- ${c.name}: ${c.hint}`).join(
+  "\n",
+);
 
 const PROMPT = `Read this receipt photo and record it with the ${TOOL_NAME} tool.
 
@@ -49,8 +51,17 @@ Rules:
 - Leave out any field you cannot read rather than guessing.
 - merchant is the store or business name as a person would say it ("Costco", not "COSTCO WHOLESALE #552").
 - raw_text is a plain transcription of the receipt, top to bottom.
-- category is the one budget category the purchase mostly belongs to:
-${CATEGORY_GUIDE}`;
+- category is the one budget category the purchase mostly belongs to.
+
+Categories:
+${CATEGORY_GUIDE}
+
+Splits: if the line items clearly belong to two or more different categories
+(groceries and beer on one supermarket receipt, or snacks and car wash fluid at
+a gas station, say), add a "splits" list with one entry per category and how
+much of the total went to it. Share tax and fees across the categories in
+proportion to their items, so the split amounts add up exactly to the total.
+If everything belongs to one category, leave "splits" out.`;
 
 const TOOL = {
   name: TOOL_NAME,
@@ -65,6 +76,18 @@ const TOOL = {
       total: { type: "number", description: "Amount paid." },
       category: { type: "string", enum: CATEGORY_NAMES },
       raw_text: { type: "string" },
+      splits: {
+        type: "array",
+        description: "Only when the items span two or more categories.",
+        items: {
+          type: "object",
+          properties: {
+            category: { type: "string", enum: CATEGORY_NAMES },
+            amount: { type: "number" },
+          },
+          required: ["category", "amount"],
+        },
+      },
     },
   },
 } as const;
@@ -221,12 +244,55 @@ export function toScanResult(input: Record<string, unknown>): ScanResult {
   if (subtotal !== undefined) fields.subtotalCents = subtotal;
   if (tax !== undefined) fields.taxCents = tax;
 
-  if (CATEGORY_NAMES.includes(input.category as Category)) {
-    fields.category = input.category as Category;
-  }
+  if (isCategory(input.category)) fields.category = input.category;
 
   const rawText = toText(input.raw_text, RAW_TEXT_MAX);
   if (rawText) fields.rawText = rawText;
 
+  if (total !== undefined) {
+    const splits = toSplits(input.splits, total);
+    if (splits) {
+      fields.splits = splits;
+      // The headline category is the biggest part of the split.
+      fields.category = splits[0]?.category;
+    }
+  }
+
   return { recognised: Object.keys(fields).length > 0, fields };
+}
+
+/**
+ * The model's split, cleaned up: unknown categories dropped, repeats merged,
+ * and the parts made to add up to the total. A rounding gap of a few cents
+ * goes onto the largest part; anything bigger means the model got it wrong,
+ * so no split is suggested. Largest part first. Exported for tests.
+ */
+export function toSplits(
+  value: unknown,
+  totalCents: number,
+): ReceiptSplit[] | null {
+  if (!Array.isArray(value)) return null;
+
+  const byCategory = new Map<ReceiptSplit["category"], number>();
+  for (const entry of value) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const { category, amount } = entry as {
+      category?: unknown;
+      amount?: unknown;
+    };
+    const cents = toCents(amount);
+    if (!isCategory(category) || !cents) continue;
+    byCategory.set(category, (byCategory.get(category) ?? 0) + cents);
+  }
+
+  const splits = [...byCategory]
+    .map(([category, amountCents]) => ({ category, amountCents }))
+    .sort((a, b) => b.amountCents - a.amountCents);
+  if (splits.length < 2) return null;
+
+  const gap = totalCents - splits.reduce((sum, s) => sum + s.amountCents, 0);
+  if (Math.abs(gap) > splits.length * 2) return null;
+  const largest = splits[0] as ReceiptSplit;
+  largest.amountCents += gap;
+  return largest.amountCents > 0 ? splits : null;
 }

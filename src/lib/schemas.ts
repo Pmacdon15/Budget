@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { CATEGORY_NAMES } from "@/lib/categories";
-import { parseMoney } from "@/lib/money";
+import { formatMoney, parseMoney } from "@/lib/money";
 import { isMonth } from "@/lib/month";
 
 /**
@@ -108,10 +108,69 @@ export const receiptFieldsSchema = z.object({
   receiptText: optionalText(4000),
 });
 
-/** The add-expense form: an expense, optionally with the receipt it was scanned from. */
-export const expenseWithReceiptSchema = expenseSchema.extend(
-  receiptFieldsSchema.shape,
-);
+const splitLineSchema = z.object({
+  category,
+  amount: money.refine((cents) => cents > 0, "Each part needs an amount"),
+});
+
+/**
+ * The split editor's lines, posted as one JSON hidden input:
+ * `[{"category":"Groceries","amount":"80.00"},{"category":"Alcohol","amount":"33.00"}]`.
+ * Empty means no split.
+ */
+const splitsField = z
+  .string()
+  .optional()
+  .transform((value, ctx) => {
+    if (!value?.trim()) return null;
+    let raw: unknown;
+    try {
+      raw = JSON.parse(value);
+    } catch {
+      ctx.addIssue({ code: "custom", message: "Check the split amounts" });
+      return z.NEVER;
+    }
+    const parsed = z.array(splitLineSchema).safeParse(raw);
+    if (!parsed.success) {
+      ctx.addIssue({
+        code: "custom",
+        message: parsed.error.issues[0]?.message ?? "Check the split amounts",
+      });
+      return z.NEVER;
+    }
+    return parsed.data.map((line) => ({
+      category: line.category,
+      amountCents: line.amount,
+    }));
+  });
+
+/**
+ * The add-expense form: an expense, optionally with the receipt it was scanned
+ * from, optionally split across categories (one expense saved per part).
+ */
+export const expenseWithReceiptSchema = expenseSchema
+  .extend({ ...receiptFieldsSchema.shape, splits: splitsField })
+  .superRefine((value, ctx) => {
+    if (!value.splits) return;
+    const issue = (message: string) =>
+      ctx.addIssue({ code: "custom", message, path: ["splits"] });
+
+    if (value.splits.length < 2) {
+      issue("Split into at least two categories");
+      return;
+    }
+    const categories = new Set(value.splits.map((s) => s.category));
+    if (categories.size !== value.splits.length) {
+      issue("Use each category once");
+      return;
+    }
+    const assigned = value.splits.reduce((sum, s) => sum + s.amountCents, 0);
+    if (assigned !== value.amount) {
+      issue(
+        `The parts add up to ${formatMoney(assigned)} but the total is ${formatMoney(value.amount)}`,
+      );
+    }
+  });
 
 const yearMonth = z.string().refine(isMonth, "Pick a month");
 

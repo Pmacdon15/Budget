@@ -1,7 +1,10 @@
 "use client";
 
-import { Sparkles } from "lucide-react";
+import { Sparkles, Split } from "lucide-react";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { type Category, isCategory } from "@/lib/categories";
 import { centsToInput } from "@/lib/money";
 import { currentMonth, today } from "@/lib/month";
 import { expenseWithReceiptSchema } from "@/lib/schemas";
@@ -9,6 +12,7 @@ import type { Expense, ScanResponse } from "@/lib/types";
 import { useSaveExpense } from "@/mutations/expenses";
 import { CategorySelect, Field, MoneyInput } from "./fields";
 import { FieldError, FormDialog } from "./form-dialog";
+import { type SplitDraft, SplitEditor } from "./split-editor";
 
 /** A finished scan: what the server returned plus a local preview of the photo. */
 export type ScannedReceipt = ScanResponse & { previewUrl: string };
@@ -38,6 +42,33 @@ export function ExpenseDialog({
   const fallbackDate = month === currentMonth() ? today() : `${month}-01`;
   const defaultDate = expense?.spentOn ?? read?.purchasedOn ?? fallbackDate;
 
+  const defaultAmount = expense
+    ? centsToInput(expense.amountCents)
+    : read?.totalCents !== undefined
+      ? centsToInput(read.totalCents)
+      : undefined;
+  const defaultCategory: Category =
+    (expense && isCategory(expense.category) ? expense.category : undefined) ??
+    read?.category ??
+    "Groceries";
+  const suggestedSplit = !editing && (read?.splits?.length ?? 0) > 1;
+
+  // The total as typed, so the split editor can show what's left to assign.
+  const [total, setTotal] = useState(defaultAmount ?? "");
+  const [splitting, setSplitting] = useState(suggestedSplit);
+  const initialSplit: SplitDraft[] = suggestedSplit
+    ? (read?.splits ?? []).map((s) => ({
+        category: s.category,
+        amount: centsToInput(s.amountCents),
+      }))
+    : [
+        { category: defaultCategory, amount: total },
+        {
+          category: defaultCategory === "Alcohol" ? "Groceries" : "Alcohol",
+          amount: "",
+        },
+      ];
+
   const description = editing
     ? "One-off spending like groceries, gas or a night out."
     : scan
@@ -50,7 +81,11 @@ export function ExpenseDialog({
     <FormDialog
       trigger={trigger}
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(next) => {
+        // A fresh "Add expense" starts as a single category again.
+        if (!next) setSplitting(suggestedSplit);
+        onOpenChange?.(next);
+      }}
       title={
         editing ? "Edit expense" : scan ? "Scanned receipt" : "Add an expense"
       }
@@ -140,13 +175,8 @@ export function ExpenseDialog({
           <MoneyInput
             id="expense-amount"
             name="amount"
-            defaultValue={
-              expense
-                ? centsToInput(expense.amountCents)
-                : read?.totalCents !== undefined
-                  ? centsToInput(read.totalCents)
-                  : undefined
-            }
+            defaultValue={defaultAmount}
+            onValueChange={setTotal}
           />
           <FieldError name="amount" />
         </Field>
@@ -161,13 +191,41 @@ export function ExpenseDialog({
           <FieldError name="spentOn" />
         </Field>
       </div>
-      <Field label="Category" htmlFor="expense-category">
-        <CategorySelect
-          id="expense-category"
-          defaultValue={expense?.category ?? read?.category ?? "Groceries"}
-        />
-        <FieldError name="category" />
-      </Field>
+      {splitting ? (
+        <div className="grid gap-1.5">
+          <div className="flex items-center justify-between">
+            <span className="font-medium text-sm">Split across categories</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setSplitting(false)}
+            >
+              One category
+            </Button>
+          </div>
+          <SplitEditor total={total} initial={initialSplit} />
+        </div>
+      ) : (
+        <Field label="Category" htmlFor="expense-category">
+          <CategorySelect
+            id="expense-category"
+            defaultValue={defaultCategory}
+          />
+          <FieldError name="category" />
+          {editing ? null : (
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              className="h-auto justify-self-start px-0"
+              onClick={() => setSplitting(true)}
+            >
+              <Split /> Split across categories
+            </Button>
+          )}
+        </Field>
+      )}
     </FormDialog>
   );
 }

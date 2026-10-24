@@ -6,6 +6,7 @@ import {
   readReceiptSafely,
   resolveEndpoint,
   toScanResult,
+  toSplits,
 } from "@/lib/receipt-ai";
 
 vi.mock("@vercel/oidc", () => ({ getVercelOidcToken: vi.fn() }));
@@ -195,5 +196,89 @@ describe("toScanResult", () => {
     });
     expect(fields.merchant).toHaveLength(120);
     expect(fields.rawText).toHaveLength(4000);
+  });
+});
+
+describe("receipt splits", () => {
+  it("asks the model to split mixed receipts using the category hints", async () => {
+    const fetch = vi.fn(async (_url: string, _init: RequestInit) =>
+      Response.json({ content: [] }),
+    );
+    await readReceipt(IMAGE, {
+      env: { ANTHROPIC_API_KEY: "k" },
+      fetch: fetch as unknown as typeof globalThis.fetch,
+    });
+    const body = JSON.parse(String(fetch.mock.calls[0]?.[1]?.body));
+    const prompt = body.messages[0].content[1].text as string;
+    expect(prompt).toContain("- Alcohol: beer, wine");
+    expect(prompt).toContain("- Auto: car repairs");
+    expect(prompt).toContain('"splits"');
+    expect(body.tools[0].input_schema.properties.splits.items.required).toEqual(
+      ["category", "amount"],
+    );
+  });
+
+  it("keeps a split that adds up, largest part first, as the headline category", () => {
+    expect(
+      toScanResult({
+        total: 113,
+        category: "Groceries",
+        splits: [
+          { category: "Alcohol", amount: 33 },
+          { category: "Groceries", amount: 80 },
+        ],
+      }).fields,
+    ).toEqual({
+      totalCents: 11_300,
+      category: "Groceries",
+      splits: [
+        { category: "Groceries", amountCents: 8_000 },
+        { category: "Alcohol", amountCents: 3_300 },
+      ],
+    });
+  });
+
+  it("puts a rounding gap on the largest part and merges repeats", () => {
+    expect(
+      toSplits(
+        [
+          { category: "Groceries", amount: 50.01 },
+          { category: "Groceries", amount: 20 },
+          { category: "Alcohol", amount: 30 },
+          { category: "Yachts", amount: 5 },
+          { category: "Food", amount: 0 },
+          "junk",
+        ],
+        10_000,
+      ),
+    ).toEqual([
+      { category: "Groceries", amountCents: 7_000 },
+      { category: "Alcohol", amountCents: 3_000 },
+    ]);
+  });
+
+  it("drops a split that doesn't add up or has one part", () => {
+    expect(
+      toSplits(
+        [
+          { category: "Groceries", amount: 50 },
+          { category: "Alcohol", amount: 20 },
+        ],
+        10_000,
+      ),
+    ).toBeNull();
+    expect(
+      toSplits([{ category: "Groceries", amount: 100 }], 10_000),
+    ).toBeNull();
+    expect(toSplits("nope", 10_000)).toBeNull();
+    // No total means nothing to check a split against.
+    expect(
+      toScanResult({
+        splits: [
+          { category: "Groceries", amount: 1 },
+          { category: "Alcohol", amount: 1 },
+        ],
+      }).fields.splits,
+    ).toBeUndefined();
   });
 });

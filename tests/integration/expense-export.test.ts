@@ -2,7 +2,11 @@ import { inflateRawSync } from "node:zlib";
 import { PDFDocument } from "pdf-lib";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "@/app/(app)/expenses/export/route";
-import { insertExpense, insertExpenseWithReceipt } from "@/db/expenses";
+import {
+  insertExpense,
+  insertExpenseLines,
+  insertExpenseWithReceipt,
+} from "@/db/expenses";
 import { readReceiptImage } from "@/lib/receipt-store";
 import { signOut } from "../helpers/auth";
 
@@ -176,5 +180,34 @@ describe("GET /expenses/export", () => {
     await expect(
       download("format=csv&from=2026-10&to=2026-10&category=Dining"),
     ).rejects.toMatchObject({ url: "/sign-in" });
+  });
+
+  it("prints a split receipt's photo once in a PDF", async () => {
+    await insertExpenseLines(
+      "user_a",
+      { month: "2026-10", spentOn: "2026-10-20", description: "Superstore" },
+      [
+        { category: "Groceries", amountCents: 8_000 },
+        { category: "Alcohol", amountCents: 3_300 },
+      ],
+      {
+        imagePathname:
+          "receipts/user_a/3c8f2d3b-0a3e-4d2f-9b4c-2e3f4a5b6c7d.jpg",
+        merchant: "Superstore",
+        purchasedOn: null,
+        subtotalCents: null,
+        taxCents: null,
+        totalCents: 11_300,
+        rawText: null,
+      },
+    );
+    vi.mocked(readReceiptImage).mockResolvedValue(null);
+    await download(
+      "format=pdf&from=2026-10&to=2026-10&category=Groceries&category=Alcohol&photos=1",
+    );
+    expect(vi.mocked(readReceiptImage).mock.calls.map((c) => c[0])).toEqual([
+      "receipts/user_a/2b7e1c2a-9f2d-4c1e-8a3b-1d2e3f4a5b6c.jpg",
+      "receipts/user_a/3c8f2d3b-0a3e-4d2f-9b4c-2e3f4a5b6c7d.jpg",
+    ]);
   });
 });

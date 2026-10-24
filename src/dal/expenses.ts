@@ -3,8 +3,8 @@ import { currentUserIdOrThrow, requireUserId } from "@/dal/auth";
 import { NotFoundError } from "@/dal/errors";
 import {
   deleteExpenseRow,
-  insertExpense,
-  insertExpenseWithReceipt,
+  type ExpenseLine,
+  insertExpenseLines,
   selectExpensesForExport,
   selectReceiptImage,
   updateExpenseRow,
@@ -47,12 +47,25 @@ const values = (input: ExpenseInput) => ({
   amountCents: input.amount,
 });
 
+/**
+ * Saves a new expense. With `splits`, one expense is saved per category part
+ * (same description and date); with a scanned photo, the receipt is saved once
+ * and every part links to it.
+ */
 export async function createExpense(
-  input: ExpenseInput & Partial<ReceiptFieldsInput>,
+  input: ExpenseInput &
+    Partial<ReceiptFieldsInput> & {
+      splits?: ExpenseLine[] | null;
+    },
 ) {
   const userId = await currentUserIdOrThrow();
+  const { category, amountCents, ...base } = values(input);
+  const lines = input.splits?.length
+    ? input.splits
+    : [{ category, amountCents }];
+
   if (!input.receiptImage) {
-    await insertExpense(userId, values(input));
+    await insertExpenseLines(userId, base, lines, null);
     return;
   }
 
@@ -63,7 +76,7 @@ export async function createExpense(
       "That receipt photo couldn't be attached. Scan it again.",
     );
   }
-  await insertExpenseWithReceipt(userId, values(input), {
+  await insertExpenseLines(userId, base, lines, {
     imagePathname: input.receiptImage,
     merchant: input.receiptMerchant ?? null,
     purchasedOn: input.receiptPurchasedOn ?? null,
