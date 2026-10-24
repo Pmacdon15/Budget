@@ -1,3 +1,5 @@
+import type { Category } from "@/lib/categories";
+
 export type FixedItem = {
   id: string;
   name: string;
@@ -23,7 +25,33 @@ export type Expense = {
   description: string;
   category: string;
   amountCents: number;
+  /** The scanned receipt saved with this expense, if any. */
+  receiptId: string | null;
 };
+
+/** One expense line in a download, with what was read off its receipt. */
+export type ExpenseExportRow = Expense & {
+  merchant: string | null;
+  subtotalCents: number | null;
+  taxCents: number | null;
+  imagePathname: string | null;
+};
+
+/** What the AI read off a receipt photo. Every field is a suggestion. */
+export type ScannedFields = {
+  merchant?: string;
+  purchasedOn?: string;
+  totalCents?: number;
+  subtotalCents?: number;
+  taxCents?: number;
+  category?: Category;
+  rawText?: string;
+};
+
+export type ScanResult = { recognised: boolean; fields: ScannedFields };
+
+/** What `POST /api/receipts` answers: the stored photo's pathname plus the reading. */
+export type ScanResponse = ScanResult & { image: string };
 
 export type MonthTotals = {
   month: string;

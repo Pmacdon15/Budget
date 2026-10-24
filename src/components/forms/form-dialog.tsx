@@ -52,18 +52,29 @@ export function FormDialog<TSchema extends z.ZodType>({
   successMessage,
   schema,
   mutation,
+  open: controlledOpen,
+  onOpenChange,
   children,
 }: {
-  trigger: React.ReactElement;
+  /** Opens the dialog. Optional when the dialog is opened through `open`. */
+  trigger?: React.ReactElement;
   title: string;
   description?: string;
   submitLabel: string;
   successMessage: string;
   schema: TSchema;
   mutation: UseMutationResult<void, ActionError, z.input<TSchema>>;
+  /** Controls the dialog from outside, e.g. to open it once a scan finishes. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const open = controlledOpen ?? uncontrolledOpen;
+  const setOpen = (next: boolean) => {
+    setUncontrolledOpen(next);
+    onOpenChange?.(next);
+  };
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -110,7 +121,7 @@ export function FormDialog<TSchema extends z.ZodType>({
         if (!next) reset();
       }}
     >
-      <DialogTrigger render={trigger} />
+      {trigger ? <DialogTrigger render={trigger} /> : null}
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
