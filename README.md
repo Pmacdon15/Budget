@@ -56,5 +56,32 @@ bun dev
 | `bun dev` | Dev server |
 | `bun run build` | Migrate the database, then `next build` |
 | `bun run lint` | Biome check |
+| `bun run lint:fix` | Biome check with safe and unsafe fixes applied |
 | `bun run format` | Biome format |
 | `bun run typecheck` | `tsc --noEmit` |
+| `bun run test` | Every test (unit, component and integration) |
+| `bun run test:unit` | Unit and component tests |
+| `bun run test:integration` | Integration tests |
+| `bun run test:watch` | Tests in watch mode |
+| `bun run test:coverage` | Every test, with a coverage report in `coverage/` |
+
+## Tests
+
+Tests use [Vitest](https://vitest.dev) and live in `tests/`:
+
+- **`tests/unit`** — budget math, money and month helpers, Zod schemas, the server-action wrapper, TanStack Query mutations, the Clerk proxy, and every component (Testing Library in jsdom): forms, dialogs, row menus, navigation and charts.
+- **`tests/integration`** — the real SQL in `src/db`, the DAL rules (edits apply from the viewed month on, stopping vs. deleting bills, rolling take-home), server actions end to end, the CSV export, the migration script and every page rendered with data. They run against an in-memory Postgres ([PGlite](https://pglite.dev)) loaded with `src/db/schema.sql`, so no database or secrets are needed. Clerk is mocked, and tests check that one user can never read or change another's data.
+
+## CI
+
+Every pull request runs three workflows in `.github/workflows`:
+
+| Workflow | Checks | Fails when |
+| --- | --- | --- |
+| `tests.yml` | **Unit tests**, **Integration tests** | Any test fails |
+| `typecheck.yml` | **Type check** | `bun run typecheck` reports an error |
+| `biome.yml` | **Biome** | Biome finds something it can't fix |
+
+The Biome workflow fixes what it can (`biome check --write --unsafe`) and commits the result to the pull request as a verified `style: apply Biome fixes` commit, then re-runs all the checks on that commit. Pull requests from forks are checked but not fixed.
+
+To block merging when a check fails, add a branch protection rule (or ruleset) on `main` that requires status checks to pass, and select **Unit tests**, **Integration tests**, **Type check** and **Biome**.
