@@ -147,7 +147,7 @@ export function ExportDialog({ month }: { month: string }) {
                     className="size-2.5 shrink-0 rounded-full"
                     style={{ backgroundColor: category.color }}
                   />
-                  {category.name}
+                  {category.label}
                 </label>
               ))}
             </div>

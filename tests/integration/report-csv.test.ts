@@ -63,9 +63,9 @@ describe("GET /report/csv", () => {
       "take-home,2026-10-15,Paycheque,,2500.00",
       "take-home,2026-10,Side job,,100.00",
       // No due day: dated to the month. Otherwise dated to the due day.
-      "fixed,2026-10,Phone,Utilities,-60.00",
-      "fixed,2026-10-01,Rent,Housing,-1500.00",
-      'spending,2026-10-05,"Dinner, ""the good place""",Dining,-85.50',
+      "fixed,2026-10,Phone,Utilities & Phone,-60.00",
+      "fixed,2026-10-01,Rent,Rent & Home,-1500.00",
+      'spending,2026-10-05,"Dinner, ""the good place""",Meals & Dining,-85.50',
       "",
       "summary,2026-10,Take-home,,2600.00",
       "summary,2026-10,Fixed bills,,-1560.00",

@@ -46,9 +46,13 @@ export const UNAVAILABLE: ScanResult = {
   unavailable: true,
 };
 
-const CATEGORY_GUIDE = CATEGORIES.map((c) => `- ${c.name}: ${c.hint}`).join(
-  "\n",
-);
+// The tool's enum takes the stored name; the label in brackets is what the
+// person sees, so the model can match either wording.
+const CATEGORY_GUIDE = CATEGORIES.map((c) =>
+  c.label === c.name
+    ? `- ${c.name}: ${c.hint}`
+    : `- ${c.name} (shown as "${c.label}"): ${c.hint}`,
+).join("\n");
 
 const PROMPT = `Read this receipt photo and record it with the ${TOOL_NAME} tool.
 

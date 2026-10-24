@@ -216,7 +216,7 @@ describe("receipt splits", () => {
     const body = JSON.parse(String(fetch.mock.calls[0]?.[1]?.body));
     const prompt = body.messages[0].content[1].text as string;
     expect(prompt).toContain("- Alcohol: beer, wine");
-    expect(prompt).toContain("- Auto: car repairs");
+    expect(prompt).toContain('- Auto (shown as "Motor Vehicle"): car repairs');
     expect(prompt).toContain('"splits"');
     expect(body.tools[0].input_schema.properties.splits.items.required).toEqual(
       ["category", "amount"],

@@ -1,4 +1,5 @@
 import { getMonthOverview } from "@/dal/overview";
+import { categoryLabel } from "@/lib/categories";
 import { resolveMonth } from "@/lib/month";
 
 const cell = (value: string | number) => {
@@ -28,14 +29,14 @@ export async function GET(request: Request) {
       "fixed",
       f.dueDay ? `${month}-${String(f.dueDay).padStart(2, "0")}` : month,
       f.name,
-      f.category,
+      categoryLabel(f.category),
       dollars(-f.amountCents),
     ]),
     ...expenses.map((e) => [
       "spending",
       e.spentOn,
       e.description,
-      e.category,
+      categoryLabel(e.category),
       dollars(-e.amountCents),
     ]),
     [],

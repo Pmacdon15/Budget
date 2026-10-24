@@ -38,7 +38,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { getLatestIncome } from "@/dal/income";
 import { getMonthOverview } from "@/dal/overview";
-import { categoryColor } from "@/lib/categories";
+import { categoryColor, categoryLabel } from "@/lib/categories";
 import { formatMoney, formatPercent } from "@/lib/money";
 import { monthLabel } from "@/lib/month";
 import { monthFrom, type SearchParams } from "@/lib/search-params";
@@ -509,7 +509,7 @@ async function RecentSpending({ month }: MonthProp) {
           <div className="min-w-0">
             <div className="truncate font-medium">{expense.description}</div>
             <div className="text-muted-foreground text-xs">
-              {expense.category} · {expense.spentOn}
+              {categoryLabel(expense.category)} · {expense.spentOn}
             </div>
           </div>
           <span className="ml-auto tabular-nums">

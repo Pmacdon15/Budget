@@ -31,7 +31,9 @@ describe("SpendingDonut", () => {
     render(<SpendingDonut categories={categories} />);
     const items = screen.getAllByRole("listitem");
     expect(items).toHaveLength(2);
-    expect(within(items[0] as HTMLElement).getByText("Housing")).toBeVisible();
+    expect(
+      within(items[0] as HTMLElement).getByText("Rent & Home"),
+    ).toBeVisible();
     expect(within(items[0] as HTMLElement).getByText("75%")).toBeVisible();
     expect(
       within(items[0] as HTMLElement).getByText("$1,500.00"),

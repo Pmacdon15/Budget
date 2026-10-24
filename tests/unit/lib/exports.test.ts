@@ -54,7 +54,7 @@ describe("export labels", () => {
       "January 2026 – October 2026",
     );
     expect(categoryLabel(filters({ categories: ["Dining", "Health"] }))).toBe(
-      "Dining, Health",
+      "Meals & Dining, Health",
     );
     expect(categoryLabel(filters({ categories: [...CATEGORY_NAMES] }))).toBe(
       "All categories",
