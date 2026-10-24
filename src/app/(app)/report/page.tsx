@@ -23,7 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getMonthOverview } from "@/dal/overview";
-import { categoryColor } from "@/lib/categories";
+import { categoryColor, categoryLabel } from "@/lib/categories";
 import { formatMoney, formatPercent } from "@/lib/money";
 import { monthLabel } from "@/lib/month";
 import { monthFrom, type SearchParams } from "@/lib/search-params";
@@ -293,7 +293,7 @@ async function Report({ month: monthPromise }: { month: Promise<string> }) {
                                   backgroundColor: categoryColor(c.category),
                                 }}
                               />
-                              {c.category}
+                              {categoryLabel(c.category)}
                             </div>
                           </TableCell>
                           <TableCell className="hidden text-right tabular-nums sm:table-cell">
@@ -341,8 +341,8 @@ async function Report({ month: monthPromise }: { month: Promise<string> }) {
                   id: f.id,
                   name: f.name,
                   detail: f.dueDay
-                    ? `${f.category} · day ${f.dueDay}`
-                    : f.category,
+                    ? `${categoryLabel(f.category)} · day ${f.dueDay}`
+                    : categoryLabel(f.category),
                   amount: f.amountCents,
                 }))}
             />
@@ -354,7 +354,7 @@ async function Report({ month: monthPromise }: { month: Promise<string> }) {
             rows={expenses.map((e) => ({
               id: e.id,
               name: e.description,
-              detail: `${e.spentOn} · ${e.category}`,
+              detail: `${e.spentOn} · ${categoryLabel(e.category)}`,
               amount: e.amountCents,
             }))}
           />

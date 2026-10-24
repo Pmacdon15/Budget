@@ -31,7 +31,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getMonthOverview } from "@/dal/overview";
-import { categoryColor } from "@/lib/categories";
+import { categoryColor, categoryLabel } from "@/lib/categories";
 import { formatMoney } from "@/lib/money";
 import { monthLabel } from "@/lib/month";
 import { monthFrom, type SearchParams } from "@/lib/search-params";
@@ -181,12 +181,14 @@ async function Expenses({ month: monthPromise }: { month: Promise<string> }) {
                           {expense.spentOn}
                           <span className="sm:hidden">
                             {" "}
-                            · {expense.category}
+                            · {categoryLabel(expense.category)}
                           </span>
                         </div>
                       </TableCell>
                       <TableCell className="hidden sm:table-cell">
-                        <Badge variant="outline">{expense.category}</Badge>
+                        <Badge variant="outline">
+                          {categoryLabel(expense.category)}
+                        </Badge>
                       </TableCell>
                       <TableCell className="text-right font-medium tabular-nums">
                         {formatMoney(expense.amountCents)}

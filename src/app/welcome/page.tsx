@@ -11,7 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { categoryColor } from "@/lib/categories";
+import { categoryColor, categoryLabel } from "@/lib/categories";
 import { formatMoney, formatPercent } from "@/lib/money";
 import {
   SAMPLE_CATEGORIES,
@@ -172,7 +172,7 @@ export default function WelcomePage() {
                           className="size-2.5 shrink-0 rounded-full"
                           style={{ backgroundColor: categoryColor(category) }}
                         />
-                        {category}
+                        {categoryLabel(category)}
                       </span>
                       <span className="h-2 overflow-hidden rounded-full bg-muted">
                         <span

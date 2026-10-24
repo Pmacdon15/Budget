@@ -250,7 +250,9 @@ describe("ExportDialog", () => {
     );
     expect(within(dialog).queryByRole("link")).toBeNull();
 
-    await user.click(within(dialog).getByRole("checkbox", { name: "Dining" }));
+    await user.click(
+      within(dialog).getByRole("checkbox", { name: "Meals & Dining" }),
+    );
     await user.click(within(dialog).getByRole("checkbox", { name: "Health" }));
     await user.click(within(dialog).getByRole("button", { name: "Excel" }));
 

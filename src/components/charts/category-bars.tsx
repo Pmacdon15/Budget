@@ -7,7 +7,7 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import { categoryColor } from "@/lib/categories";
+import { categoryColor, categoryLabel } from "@/lib/categories";
 import { formatMoney, formatMoneyCompact } from "@/lib/money";
 import type { CategoryTotal } from "@/lib/types";
 
@@ -15,7 +15,7 @@ const config = { total: { label: "Spent" } } satisfies ChartConfig;
 
 export function CategoryBars({ categories }: { categories: CategoryTotal[] }) {
   const data = categories.map((c) => ({
-    category: c.category,
+    category: categoryLabel(c.category),
     total: c.totalCents / 100,
     fill: categoryColor(c.category),
   }));

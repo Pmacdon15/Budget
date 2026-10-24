@@ -6,7 +6,7 @@ import {
   rgb,
   StandardFonts,
 } from "pdf-lib";
-import { CATEGORY_NAMES } from "@/lib/categories";
+import { CATEGORY_NAMES, categoryLabel as labelOf } from "@/lib/categories";
 import { buildXlsx, type Cell, XLSX_CONTENT_TYPE } from "@/lib/exports/xlsx";
 import { formatMoney } from "@/lib/money";
 import { monthLabel } from "@/lib/month";
@@ -53,7 +53,7 @@ export function rangeLabel(filters: ExpenseExportInput) {
 export function categoryLabel(filters: ExpenseExportInput) {
   return filters.categories.length === CATEGORY_NAMES.length
     ? "All categories"
-    : filters.categories.join(", ");
+    : filters.categories.map(labelOf).join(", ");
 }
 
 /** Spending per category, largest first, only for categories that have any. */
@@ -127,7 +127,7 @@ export function buildCsv(rows: ExpenseExportRow[]) {
     ...rows.map((r) => [
       r.spentOn,
       r.description,
-      r.category,
+      labelOf(r.category),
       dollars(r.amountCents),
       r.merchant ?? "",
       r.subtotalCents === null ? "" : dollars(r.subtotalCents),
@@ -138,7 +138,7 @@ export function buildCsv(rows: ExpenseExportRow[]) {
     ...totalsByCategory(rows).map((t) => [
       "total",
       "",
-      t.category,
+      labelOf(t.category),
       dollars(t.cents),
     ]),
     ["total", "", "All", dollars(grandTotal(rows))],
@@ -170,7 +170,7 @@ export function buildSpreadsheet(
     ...rows.map((r): Cell[] => [
       { date: r.spentOn },
       r.description,
-      r.category,
+      labelOf(r.category),
       { value: r.amountCents / 100, style: "money" },
       r.merchant ?? null,
       r.subtotalCents === null
@@ -206,7 +206,7 @@ export function buildSpreadsheet(
       style: "header",
     })),
     ...totalsByCategory(rows).map((t): Cell[] => [
-      t.category,
+      labelOf(t.category),
       { value: t.count, style: "integer" },
       { value: t.cents / 100, style: "money" },
     ]),
@@ -407,7 +407,7 @@ export async function buildPdf(
         { label: "Total", width: 136, align: "right" },
       ],
       totalsByCategory(rows).map((t) => [
-        t.category,
+        labelOf(t.category),
         String(t.count),
         formatMoney(t.cents),
       ]),
@@ -425,7 +425,7 @@ export async function buildPdf(
       rows.map((r) => [
         r.spentOn,
         r.receiptId ? `${r.description} *` : r.description,
-        r.category,
+        labelOf(r.category),
         r.taxCents === null ? "" : formatMoney(r.taxCents),
         formatMoney(r.amountCents),
       ]),
@@ -467,7 +467,7 @@ async function addPhotos(
     if (!r.imagePathname) continue;
     const entry = parts.get(r.imagePathname) ?? { cents: 0, categories: [] };
     entry.cents += r.amountCents;
-    entry.categories.push(r.category);
+    entry.categories.push(labelOf(r.category));
     parts.set(r.imagePathname, entry);
   }
   const seen = new Set<string>();
@@ -512,7 +512,7 @@ async function addPhotos(
       },
     );
     w.y -= 16;
-    w.text((part?.categories ?? [row.category]).join(", "), MARGIN, {
+    w.text((part?.categories ?? [labelOf(row.category)]).join(", "), MARGIN, {
       size: 9,
       color: MUTED,
       width: PAGE.width - 2 * MARGIN,

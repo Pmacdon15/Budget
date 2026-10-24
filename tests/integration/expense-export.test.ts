@@ -103,10 +103,10 @@ describe("GET /expenses/export", () => {
       "date,description,category,amount,merchant,subtotal,tax,receipt",
       "2026-10-05,Costco,Groceries,113.00,Costco Wholesale,100.00,13.00,yes",
       // A formula from receipt text is defused rather than run by Excel.
-      `2026-10-12,"'=HYPERLINK(""x"")",Dining,42.50,,,,`,
+      `2026-10-12,"'=HYPERLINK(""x"")",Meals & Dining,42.50,,,,`,
       "",
       "total,,Groceries,113.00",
-      "total,,Dining,42.50",
+      "total,,Meals & Dining,42.50",
       "total,,All,155.50",
     ]);
   });

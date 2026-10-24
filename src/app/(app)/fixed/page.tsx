@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/table";
 import { getFixedItems } from "@/dal/fixed-items";
 import { isActive } from "@/lib/budget";
-import { categoryColor } from "@/lib/categories";
+import { categoryColor, categoryLabel } from "@/lib/categories";
 import { formatMoney } from "@/lib/money";
 import { monthLabel } from "@/lib/month";
 import { monthFrom, type SearchParams } from "@/lib/search-params";
@@ -165,7 +165,9 @@ async function FixedBills({ month: monthPromise }: { month: Promise<string> }) {
                         </div>
                       </TableCell>
                       <TableCell className="hidden sm:table-cell">
-                        <Badge variant="outline">{item.category}</Badge>
+                        <Badge variant="outline">
+                          {categoryLabel(item.category)}
+                        </Badge>
                       </TableCell>
                       <TableCell className="hidden text-muted-foreground tabular-nums sm:table-cell">
                         {item.dueDay ? `Day ${item.dueDay}` : "—"}

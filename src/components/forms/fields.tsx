@@ -9,7 +9,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CATEGORIES, type Category, isCategory } from "@/lib/categories";
+import {
+  CATEGORIES,
+  type Category,
+  categoryLabel,
+  isCategory,
+} from "@/lib/categories";
 
 export function Field({
   label,
@@ -104,7 +109,9 @@ export function CategorySelect({
       }
     >
       <SelectTrigger id={id} className="w-full" aria-label={ariaLabel}>
-        <SelectValue />
+        <SelectValue>
+          {(value: string | null) => (value ? categoryLabel(value) : null)}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         {CATEGORIES.map((category) => (
@@ -114,7 +121,7 @@ export function CategorySelect({
               className="size-2.5 rounded-full"
               style={{ backgroundColor: category.color }}
             />
-            {category.name}
+            {category.label}
           </SelectItem>
         ))}
       </SelectContent>
