@@ -1,18 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { rows, SCHEMA, testPg } from "../../helpers/test-db";
 
-describe("schema.sql", () => {
-  it("creates the four tables", async () => {
+describe("schema", () => {
+  it("creates the original tables", async () => {
     const tables = await rows(
       `select table_name from information_schema.tables
        where table_schema = 'public' order by table_name`,
     );
-    expect(tables.map((t) => t.table_name)).toEqual([
-      "expenses",
-      "fixed_items",
-      "income",
-      "receipts",
-    ]);
+    // Migrations in src/db/migrations may add more.
+    expect(tables.map((t) => t.table_name)).toEqual(
+      expect.arrayContaining(["expenses", "fixed_items", "income", "receipts"]),
+    );
   });
 
   it("is idempotent, so it is safe to run on every deploy", async () => {

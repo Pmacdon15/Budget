@@ -1,9 +1,9 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
+import { readSchema } from "../../scripts/schema";
 
 /**
- * An in-memory Postgres (PGlite) that runs the real `src/db/schema.sql`, plus
+ * An in-memory Postgres (PGlite) that runs the real schema (`src/db/schema.sql`
+ * plus `src/db/migrations/*.sql`), plus
  * an adapter shaped like the Neon `sql` tag the app uses, so integration tests
  * exercise the app's actual SQL without a network database.
  */
@@ -11,10 +11,7 @@ import { PGlite } from "@electric-sql/pglite";
 type Row = Record<string, unknown>;
 type Query = { text: string; params: unknown[] };
 
-export const SCHEMA = readFileSync(
-  join(process.cwd(), "src/db/schema.sql"),
-  "utf8",
-);
+export const SCHEMA = readSchema();
 
 let pg: PGlite | undefined;
 
@@ -31,8 +28,15 @@ export function testPg() {
   return pg;
 }
 
+/** Empties every table, including ones added by later migrations. */
 export async function resetTestDb() {
-  await testPg().exec("truncate fixed_items, income, expenses, receipts");
+  const { rows } = await testPg().query<{ table_name: string }>(
+    `select table_name from information_schema.tables
+     where table_schema = 'public' and table_type = 'BASE TABLE'`,
+  );
+  if (rows.length === 0) return;
+  const tables = rows.map((r) => `"${r.table_name}"`).join(", ");
+  await testPg().exec(`truncate ${tables} cascade`);
 }
 
 function toQuery(strings: TemplateStringsArray, values: unknown[]): Query {
