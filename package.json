@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:unit": "vitest run --project unit --project components",
     "test:integration": "vitest run --project integration",
+    "test:build": "next build && vitest run --project build",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "db:migrate": "bun scripts/migrate.ts"
