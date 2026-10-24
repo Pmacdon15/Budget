@@ -7,8 +7,14 @@
     "build": "bun run db:migrate && next build",
     "start": "next start",
     "lint": "biome check",
+    "lint:fix": "biome check --write --unsafe",
     "format": "biome format --write",
     "typecheck": "next typegen && tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit --project components",
+    "test:integration": "vitest run --project integration",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "db:migrate": "bun scripts/migrate.ts"
   },
   "dependencies": {
