@@ -19,10 +19,19 @@ const LINKS = [
   { href: "/report", label: "Report", icon: FileText },
 ] as const;
 
-export function NavLinks({ className }: { className?: string }) {
+/**
+ * The section links without the selected month. It reads only the pathname,
+ * so it renders in the static shell; use it as the `<Suspense>` fallback for
+ * `NavLinks`, which adds `?month=` once the URL is known.
+ */
+export function StaticNavLinks({
+  className,
+  query = "",
+}: {
+  className?: string;
+  query?: string;
+}) {
   const pathname = usePathname();
-  const month = useSearchParams().get("month");
-  const query = month ? `?month=${month}` : "";
 
   return (
     <nav className={cn("flex items-center gap-1", className)}>
@@ -45,5 +54,16 @@ export function NavLinks({ className }: { className?: string }) {
         );
       })}
     </nav>
+  );
+}
+
+/** Section links that keep the selected month. Reads the URL, so wrap it in `<Suspense>`. */
+export function NavLinks({ className }: { className?: string }) {
+  const month = useSearchParams().get("month");
+  return (
+    <StaticNavLinks
+      className={className}
+      query={month ? `?month=${month}` : ""}
+    />
   );
 }

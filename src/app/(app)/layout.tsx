@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { Logo } from "@/components/logo";
 import { MonthSwitcher } from "@/components/month-switcher";
-import { NavLinks } from "@/components/nav-links";
+import { NavLinks, StaticNavLinks } from "@/components/nav-links";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -19,8 +19,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <Logo />
             <span className="hidden sm:inline">Budget</span>
           </Link>
+          {/* The links render in the static shell; only `?month=` waits for the URL. */}
           <Suspense
-            fallback={<Skeleton className="ml-4 hidden h-8 w-80 md:block" />}
+            fallback={<StaticNavLinks className="ml-4 hidden md:flex" />}
           >
             <NavLinks className="ml-4 hidden md:flex" />
           </Suspense>
@@ -33,7 +34,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <div className="border-t md:hidden">
-          <Suspense fallback={<Skeleton className="mx-4 my-2 h-8" />}>
+          <Suspense
+            fallback={
+              <StaticNavLinks className="mx-auto max-w-6xl overflow-x-auto px-2 py-1.5" />
+            }
+          >
             <NavLinks className="mx-auto max-w-6xl overflow-x-auto px-2 py-1.5" />
           </Suspense>
         </div>

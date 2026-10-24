@@ -7,8 +7,12 @@ import { ExpenseActions } from "@/components/expense-actions";
 import { ExportDialog } from "@/components/export-dialog";
 import { ExpenseDialog } from "@/components/forms/expense-dialog";
 import { PageHeader } from "@/components/page-header";
-import { PageSkeleton } from "@/components/page-skeleton";
 import { ScanReceiptButton } from "@/components/scan-receipt-button";
+import {
+  ActionsSkeleton,
+  SplitCardsSkeleton,
+  TextSkeleton,
+} from "@/components/skeletons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,20 +39,58 @@ import type { CategoryTotal } from "@/lib/types";
 
 export const metadata = { title: "Spending" };
 
+/*
+ * Not async: the heading is in the static shell. The month name, the buttons
+ * that need the month, and the list each wait in their own `<Suspense>` hole.
+ */
 export default function ExpensesPage({
   searchParams,
 }: {
   searchParams: SearchParams;
 }) {
+  const month = monthFrom(searchParams);
+
   return (
-    <Suspense fallback={<PageSkeleton />}>
-      <Expenses searchParams={searchParams} />
-    </Suspense>
+    <>
+      <PageHeader
+        title="Spending"
+        description={
+          <>
+            One-off expenses in{" "}
+            <Suspense fallback={<TextSkeleton className="w-24" />}>
+              {month.then((m) => monthLabel(m))}
+            </Suspense>{" "}
+            — everything that isn't a fixed bill.
+          </>
+        }
+      >
+        <Suspense fallback={<ActionsSkeleton count={3} />}>
+          {month.then((m) => (
+            <>
+              <ExportDialog month={m} />
+              <ScanReceiptButton month={m} />
+              <ExpenseDialog
+                month={m}
+                trigger={
+                  <Button>
+                    <Plus /> Add expense
+                  </Button>
+                }
+              />
+            </>
+          ))}
+        </Suspense>
+      </PageHeader>
+
+      <Suspense fallback={<SplitCardsSkeleton />}>
+        <Expenses month={month} />
+      </Suspense>
+    </>
   );
 }
 
-async function Expenses({ searchParams }: { searchParams: SearchParams }) {
-  const month = await monthFrom(searchParams);
+async function Expenses({ month: monthPromise }: { month: Promise<string> }) {
+  const month = await monthPromise;
   const { expenses, current, previous } = await getMonthOverview(month, 2);
 
   const byCategory = new Map<string, CategoryTotal>();
@@ -69,22 +111,6 @@ async function Expenses({ searchParams }: { searchParams: SearchParams }) {
 
   return (
     <>
-      <PageHeader
-        title="Spending"
-        description={`One-off expenses in ${monthLabel(month)} — everything that isn't a fixed bill.`}
-      >
-        <ExportDialog month={month} />
-        <ScanReceiptButton month={month} />
-        <ExpenseDialog
-          month={month}
-          trigger={
-            <Button>
-              <Plus /> Add expense
-            </Button>
-          }
-        />
-      </PageHeader>
-
       {expenses.length === 0 ? (
         <EmptyState
           icon={Receipt}

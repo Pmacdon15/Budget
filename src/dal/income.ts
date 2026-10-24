@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { currentUserIdOrThrow, requireUserId } from "@/dal/auth";
 import { NotFoundError } from "@/dal/errors";
 import {
@@ -12,11 +13,11 @@ import type { IncomeEntry } from "@/lib/types";
 
 /* ---------- Reads ---------- */
 
-/** The most recent take-home entry, used to prefill the next one. */
-export async function getLatestIncome(): Promise<IncomeEntry | null> {
+/** The most recent take-home entry, used to prefill the next one. Deduplicated per request. */
+export const getLatestIncome = cache(async (): Promise<IncomeEntry | null> => {
   const userId = await requireUserId();
   return selectLatestIncome(userId);
-}
+});
 
 /* ---------- Writes ---------- */
 

@@ -3,7 +3,8 @@ export function PageHeader({
   description,
   children,
 }: {
-  title: string;
+  /** May hold a `<Suspense>` hole, e.g. a month label read from the URL. */
+  title: React.ReactNode;
   description?: React.ReactNode;
   children?: React.ReactNode;
 }) {
