@@ -70,6 +70,8 @@ much of the total went to it. Share tax and fees across the categories in
 proportion to their items, so the split amounts add up exactly to the total.
 If everything belongs to one category, leave "splits" out.`;
 
+const SYSTEM = `You read receipt photos for a budgeting app. Always answer by calling the ${TOOL_NAME} tool exactly once, even if the photo is blurry or only partly readable (leave out what you can't read). Never answer in plain text.`;
+
 const TOOL = {
   name: TOOL_NAME,
   description: "Record the fields read off a receipt photo.",
@@ -164,9 +166,12 @@ export async function readReceipt(
     },
     body: JSON.stringify({
       model: endpoint.model,
-      max_tokens: 4096,
+      max_tokens: 8192,
+      // Opus 5.5 rejects a forced tool choice ("tool" / "any"), so the model
+      // picks the tool itself; the system prompt says it always must.
+      system: SYSTEM,
       tools: [TOOL],
-      tool_choice: { type: "tool", name: TOOL_NAME },
+      tool_choice: { type: "auto" },
       messages: [
         {
           role: "user",

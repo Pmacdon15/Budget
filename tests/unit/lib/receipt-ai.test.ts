@@ -103,7 +103,11 @@ describe("readReceipt", () => {
     expect(url).toBe("https://ai-gateway.vercel.sh/v1/messages");
     const body = JSON.parse(String(init?.body));
     expect(body.model).toBe(GATEWAY_MODEL);
-    expect(body.tool_choice).toEqual({ type: "tool", name: "record_receipt" });
+    // Opus 5.5 rejects forced tool choice, so the system prompt requires the tool.
+    expect(body.tool_choice).toEqual({ type: "auto" });
+    expect(body.system).toContain(
+      "Always answer by calling the record_receipt tool",
+    );
     expect(body.tools[0].input_schema.properties.category.enum).toContain(
       "Groceries",
     );
