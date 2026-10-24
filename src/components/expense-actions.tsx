@@ -1,12 +1,13 @@
 "use client";
 
-import { deleteExpense } from "@/app/actions";
 import { ConfirmAction } from "@/components/forms/confirm-action";
 import { ExpenseDialog } from "@/components/forms/expense-dialog";
 import { RowActions } from "@/components/row-actions";
-import type { Expense } from "@/lib/data";
+import type { Expense } from "@/lib/types";
+import { useDeleteExpense } from "@/mutations/expenses";
 
 export function ExpenseActions({ expense }: { expense: Expense }) {
+  const deleteExpense = useDeleteExpense();
   return (
     <RowActions
       label={expense.description}
@@ -24,7 +25,8 @@ export function ExpenseActions({ expense }: { expense: Expense }) {
           description={`“${expense.description}” will be removed.`}
           confirmLabel="Delete"
           successMessage="Expense deleted"
-          action={() => deleteExpense(expense.id)}
+          mutation={deleteExpense}
+          variables={expense.id}
         />
       )}
     />

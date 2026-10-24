@@ -24,7 +24,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getLatestIncome, getMonthOverview, requireUserId } from "@/lib/data";
+import { getLatestIncome } from "@/dal/income";
+import { getMonthOverview } from "@/dal/overview";
 import { formatMoney } from "@/lib/money";
 import { monthLabel } from "@/lib/month";
 import { monthFrom, type SearchParams } from "@/lib/search-params";
@@ -46,10 +47,9 @@ export default function IncomePage({
 
 async function Income({ searchParams }: { searchParams: SearchParams }) {
   const month = await monthFrom(searchParams);
-  const userId = await requireUserId();
   const [overview, latest] = await Promise.all([
     getMonthOverview(month),
-    getLatestIncome(userId),
+    getLatestIncome(),
   ]);
   const { current, previous, history, income, rollingIncomeCents } = overview;
   const recorded = history.filter((h) => h.incomeCents > 0);

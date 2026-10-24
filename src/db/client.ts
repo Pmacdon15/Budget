@@ -15,3 +15,6 @@ export function db() {
   }
   return client;
 }
+
+/** One row as returned by a query. */
+export type Row = Awaited<ReturnType<NeonQueryFunction<false, false>>>[number];

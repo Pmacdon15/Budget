@@ -1,11 +1,11 @@
 "use client";
 
-import { stopFixedItem } from "@/app/actions";
 import { ConfirmAction } from "@/components/forms/confirm-action";
 import { FixedItemDialog } from "@/components/forms/fixed-item-dialog";
 import { RowActions } from "@/components/row-actions";
-import type { FixedItem } from "@/lib/data";
 import { monthLabel } from "@/lib/month";
+import type { FixedItem } from "@/lib/types";
+import { useStopFixedItem } from "@/mutations/fixed-items";
 
 export function FixedItemActions({
   item,
@@ -14,6 +14,7 @@ export function FixedItemActions({
   item: FixedItem;
   month: string;
 }) {
+  const stopFixedItem = useStopFixedItem();
   const startsThisMonth = item.startMonth >= month;
   return (
     <RowActions
@@ -35,7 +36,8 @@ export function FixedItemActions({
           }
           confirmLabel={startsThisMonth ? "Delete" : "Stop bill"}
           successMessage={startsThisMonth ? "Bill deleted" : "Bill stopped"}
-          action={() => stopFixedItem(item.id, month)}
+          mutation={stopFixedItem}
+          variables={{ id: item.id, fromMonth: month }}
         />
       )}
     />

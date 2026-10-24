@@ -30,8 +30,9 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { getLatestIncome } from "@/dal/income";
+import { getMonthOverview } from "@/dal/overview";
 import { categoryColor } from "@/lib/categories";
-import { getLatestIncome, getMonthOverview, requireUserId } from "@/lib/data";
 import { formatMoney, formatPercent } from "@/lib/money";
 import { monthLabel } from "@/lib/month";
 import { monthFrom, type SearchParams } from "@/lib/search-params";
@@ -51,10 +52,9 @@ export default function OverviewPage({
 
 async function Overview({ searchParams }: { searchParams: SearchParams }) {
   const month = await monthFrom(searchParams);
-  const userId = await requireUserId();
   const [overview, latestIncome] = await Promise.all([
     getMonthOverview(month),
-    getLatestIncome(userId),
+    getLatestIncome(),
   ]);
   const {
     current,

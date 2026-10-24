@@ -1,12 +1,13 @@
 "use client";
 
-import { deleteIncome } from "@/app/actions";
 import { ConfirmAction } from "@/components/forms/confirm-action";
 import { IncomeDialog } from "@/components/forms/income-dialog";
 import { RowActions } from "@/components/row-actions";
-import type { IncomeEntry } from "@/lib/data";
+import type { IncomeEntry } from "@/lib/types";
+import { useDeleteIncome } from "@/mutations/income";
 
 export function IncomeActions({ entry }: { entry: IncomeEntry }) {
+  const deleteIncome = useDeleteIncome();
   return (
     <RowActions
       label={entry.label}
@@ -20,7 +21,8 @@ export function IncomeActions({ entry }: { entry: IncomeEntry }) {
           description={`“${entry.label}” will be removed from this month.`}
           confirmLabel="Delete"
           successMessage="Take-home deleted"
-          action={() => deleteIncome(entry.id)}
+          mutation={deleteIncome}
+          variables={entry.id}
         />
       )}
     />

@@ -16,9 +16,9 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import type { MonthTotals } from "@/lib/data";
 import { formatMoney, formatMoneyCompact } from "@/lib/money";
 import { monthLabel } from "@/lib/month";
+import type { MonthTotals } from "@/lib/types";
 
 const config = {
   income: { label: "Take-home", color: "oklch(0.65 0.15 160)" },
