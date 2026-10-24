@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { rows, SCHEMA, testPg } from "../../helpers/test-db";
 
 describe("schema.sql", () => {
-  it("creates the three tables", async () => {
+  it("creates the four tables", async () => {
     const tables = await rows(
       `select table_name from information_schema.tables
        where table_schema = 'public' order by table_name`,
@@ -11,6 +11,7 @@ describe("schema.sql", () => {
       "expenses",
       "fixed_items",
       "income",
+      "receipts",
     ]);
   });
 

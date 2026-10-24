@@ -39,7 +39,7 @@ describe("scripts/migrate.ts", () => {
     await runMigrate();
 
     expect(target.urls).toEqual(["postgres://neon.test/budget"]);
-    expect(log).toHaveBeenCalledWith("[migrate] Applied 6 statements.");
+    expect(log).toHaveBeenCalledWith("[migrate] Applied 10 statements.");
     const { rows } = await db.query<{ table_name: string }>(
       `select table_name from information_schema.tables
        where table_schema = 'public' order by table_name`,
@@ -48,6 +48,7 @@ describe("scripts/migrate.ts", () => {
       "expenses",
       "fixed_items",
       "income",
+      "receipts",
     ]);
   });
 

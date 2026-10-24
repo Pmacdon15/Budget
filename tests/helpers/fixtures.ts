@@ -32,5 +32,6 @@ export const expense = (overrides: Partial<Expense> = {}): Expense => ({
   description: "Costco run",
   category: "Groceries",
   amountCents: 12_345,
+  receiptId: null,
   ...overrides,
 });

@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CATEGORIES } from "@/lib/categories";
+import { CATEGORIES, type Category, isCategory } from "@/lib/categories";
 
 export function Field({
   label,
@@ -35,12 +35,19 @@ export function MoneyInput({
   id,
   name,
   defaultValue,
+  value,
   autoFocus,
+  onValueChange,
+  "aria-label": ariaLabel,
 }: {
   id: string;
-  name: string;
+  /** Leave out for an input that should not be posted with the form. */
+  name?: string;
   defaultValue?: string;
+  value?: string;
   autoFocus?: boolean;
+  onValueChange?: (value: string) => void;
+  "aria-label"?: string;
 }) {
   return (
     <div className="relative">
@@ -55,7 +62,12 @@ export function MoneyInput({
         placeholder="0.00"
         required
         defaultValue={defaultValue}
+        value={value}
         autoFocus={autoFocus}
+        aria-label={ariaLabel}
+        onChange={
+          onValueChange ? (e) => onValueChange(e.target.value) : undefined
+        }
         className="pl-7 tabular-nums"
       />
     </div>
@@ -66,14 +78,32 @@ export function CategorySelect({
   id,
   name = "category",
   defaultValue = "Other",
+  value,
+  onValueChange,
+  "aria-label": ariaLabel,
 }: {
   id: string;
-  name?: string;
+  /** Pass `null` for a select that should not be posted with the form. */
+  name?: string | null;
   defaultValue?: string;
+  /** Controls the select, together with `onValueChange`. */
+  value?: Category;
+  onValueChange?: (value: Category) => void;
+  "aria-label"?: string;
 }) {
   return (
-    <Select name={name} defaultValue={defaultValue}>
-      <SelectTrigger id={id} className="w-full">
+    <Select
+      name={name ?? undefined}
+      {...(value === undefined ? { defaultValue } : { value })}
+      onValueChange={
+        onValueChange
+          ? (next) => {
+              if (isCategory(next)) onValueChange(next);
+            }
+          : undefined
+      }
+    >
+      <SelectTrigger id={id} className="w-full" aria-label={ariaLabel}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

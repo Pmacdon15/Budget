@@ -18,7 +18,11 @@ describe("db/expenses", () => {
   it("inserts and reads back expenses as app objects", async () => {
     await insertExpense("user_a", values);
     const [row] = await selectExpensesBetween("user_a", "2026-10", "2026-10");
-    expect(row).toEqual({ id: expect.any(String), ...values });
+    expect(row).toEqual({
+      id: expect.any(String),
+      ...values,
+      receiptId: null,
+    });
   });
 
   it("filters by month range, newest first", async () => {
@@ -72,8 +76,10 @@ describe("db/expenses", () => {
     const [row] = await selectExpensesBetween("user_a", "2026-10", "2026-10");
     const id = row?.id as string;
 
-    expect(await deleteExpenseRow("user_b", id)).toBe(false);
-    expect(await deleteExpenseRow("user_a", id)).toBe(true);
-    expect(await deleteExpenseRow("user_a", id)).toBe(false);
+    expect(await deleteExpenseRow("user_b", id)).toBeNull();
+    expect(await deleteExpenseRow("user_a", id)).toEqual({
+      imagePathname: null,
+    });
+    expect(await deleteExpenseRow("user_a", id)).toBeNull();
   });
 });
