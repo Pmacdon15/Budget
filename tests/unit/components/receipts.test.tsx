@@ -109,7 +109,7 @@ describe("ExpenseDialog with a scanned receipt", () => {
       />,
     );
     const dialog = await screen.findByRole("dialog");
-    expect(dialog).toHaveTextContent("Couldn't read this receipt");
+    expect(dialog).toHaveTextContent("Couldn't make out this receipt");
     expect(dialog).toHaveTextContent("Photo attached");
     expect(within(dialog).getByLabelText("Description")).toHaveValue("");
     expect(within(dialog).getByLabelText("Date")).toHaveValue("2026-10-23");
@@ -169,7 +169,7 @@ describe("ScanReceiptButton", () => {
     renderWithQuery(<ScanReceiptButton month="2026-10" />);
 
     await user.upload(
-      screen.getByLabelText("Receipt photo"),
+      screen.getByLabelText("Choose a photo of the receipt"),
       new File(["raw"], "receipt.jpg", { type: "image/jpeg" }),
     );
     const dialog = await screen.findByRole("dialog");
@@ -184,7 +184,7 @@ describe("ScanReceiptButton", () => {
     );
     renderWithQuery(<ScanReceiptButton month="2026-10" />);
     await user.upload(
-      screen.getByLabelText("Receipt photo"),
+      screen.getByLabelText("Choose a photo of the receipt"),
       new File(["raw"], "receipt.jpg", { type: "image/jpeg" }),
     );
     await waitFor(() =>
@@ -408,5 +408,143 @@ describe("splitting a receipt across categories", () => {
     );
     expect(within(dialog).getByLabelText("Category")).toBeInTheDocument();
     expect(within(dialog).queryByLabelText("Part 1 amount")).toBeNull();
+  });
+});
+
+describe("scanning with the camera or the photo library", () => {
+  const scanReturns = (body: unknown) =>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json(body)),
+    );
+
+  it("offers a camera input and a library input", () => {
+    renderWithQuery(<ScanReceiptButton month="2026-10" />);
+    expect(
+      screen.getByLabelText("Take a photo of the receipt"),
+    ).toHaveAttribute("capture", "environment");
+    expect(
+      screen.getByLabelText("Choose a photo of the receipt"),
+    ).not.toHaveAttribute("capture");
+  });
+
+  it("scans from the camera too", async () => {
+    const user = userEvent.setup();
+    vi.mocked(compressImage).mockResolvedValue(new Blob(["jpeg"]));
+    scanReturns({
+      image: PHOTO,
+      recognised: true,
+      fields: { merchant: "Esso" },
+    });
+    renderWithQuery(<ScanReceiptButton month="2026-10" />);
+    await user.upload(
+      screen.getByLabelText("Take a photo of the receipt"),
+      new File(["raw"], "camera.jpg", { type: "image/jpeg" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByLabelText("Description")).toHaveValue("Esso");
+  });
+
+  it("lets Add expense scan a receipt into the open form", async () => {
+    const user = userEvent.setup();
+    vi.mocked(compressImage).mockResolvedValue(new Blob(["jpeg"]));
+    scanReturns({
+      image: PHOTO,
+      recognised: true,
+      fields: {
+        merchant: "Shell",
+        totalCents: 6_000,
+        category: "Transportation",
+      },
+    });
+    renderWithQuery(
+      <ExpenseDialog
+        month="2026-10"
+        trigger={<button type="button">Add</button>}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Have a receipt?");
+    expect(
+      within(dialog).getByRole("button", { name: "Take photo" }),
+    ).toBeVisible();
+
+    await user.upload(
+      within(dialog).getByLabelText("Take a photo of the receipt"),
+      new File(["raw"], "camera.jpg", { type: "image/jpeg" }),
+    );
+    await waitFor(() =>
+      expect(within(dialog).getByLabelText("Description")).toHaveValue("Shell"),
+    );
+    expect(within(dialog).getByLabelText("Amount")).toHaveValue("60.00");
+    expect(within(dialog).getByRole("heading")).toHaveTextContent(
+      "Scanned receipt",
+    );
+    expect(dialog).not.toHaveTextContent("Have a receipt?");
+
+    await user.click(
+      within(dialog).getByRole("button", { name: "Add expense" }),
+    );
+    await waitFor(() =>
+      expect(expenseActions.createExpense).toHaveBeenCalledWith(
+        expect.objectContaining({
+          description: "Shell",
+          category: "Transportation",
+          receiptImage: PHOTO,
+        }),
+      ),
+    );
+  });
+
+  it("doesn't offer scanning when editing", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(
+      <ExpenseDialog
+        month="2026-10"
+        expense={{
+          id: "e1",
+          month: "2026-10",
+          spentOn: "2026-10-05",
+          description: "Gas",
+          category: "Transportation",
+          amountCents: 5_000,
+          receiptId: null,
+        }}
+        trigger={<button type="button">Edit</button>}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).not.toHaveTextContent("Have a receipt?");
+  });
+
+  it("says when reading is unavailable rather than blaming the photo", async () => {
+    renderWithQuery(
+      <ExpenseDialog
+        month="2026-10"
+        open
+        scan={scan({ recognised: false, unavailable: true, fields: {} })}
+      />,
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent(
+      "Receipt reading isn't available right now",
+    );
+  });
+
+  it("passes the unavailable flag through from the server", async () => {
+    scanReturns({
+      image: PHOTO,
+      recognised: false,
+      fields: {},
+      unavailable: true,
+    });
+    expect(await scanReceipt(new Blob(["x"]))).toEqual({
+      image: PHOTO,
+      recognised: false,
+      fields: {},
+      unavailable: true,
+    });
   });
 });

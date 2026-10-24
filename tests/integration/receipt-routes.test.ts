@@ -84,6 +84,7 @@ describe("POST /api/receipts", () => {
     expect(await response.json()).toMatchObject({
       recognised: false,
       fields: {},
+      unavailable: true,
     });
   });
 
@@ -96,7 +97,10 @@ describe("POST /api/receipts", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const response = await upload(JPEG);
     expect(response.status).toBe(200);
-    expect((await response.json()).recognised).toBe(false);
+    expect(await response.json()).toMatchObject({
+      recognised: false,
+      unavailable: true,
+    });
   });
 
   it("rejects anything that isn't a JPEG", async () => {

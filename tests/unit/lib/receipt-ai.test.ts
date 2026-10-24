@@ -142,6 +142,7 @@ describe("readReceipt", () => {
     expect(await readReceiptSafely(IMAGE, deps)).toEqual({
       recognised: false,
       fields: {},
+      unavailable: true,
     });
   });
 });
@@ -280,5 +281,23 @@ describe("receipt splits", () => {
         ],
       }).fields.splits,
     ).toBeUndefined();
+  });
+});
+
+describe("model", () => {
+  it("reads receipts with Claude Opus 5.5 by default", async () => {
+    expect(ANTHROPIC_MODEL).toBe("claude-opus-5-5");
+    expect(GATEWAY_MODEL).toBe("anthropic/claude-opus-5.5");
+    expect(
+      await resolveEndpoint({ env: { ANTHROPIC_API_KEY: "k" } }),
+    ).toMatchObject({ model: "claude-opus-5-5" });
+  });
+
+  it("marks reading unavailable when there are no credentials", async () => {
+    expect(await readReceipt(IMAGE, { env: {}, oidcToken: noOidc })).toEqual({
+      recognised: false,
+      fields: {},
+      unavailable: true,
+    });
   });
 });

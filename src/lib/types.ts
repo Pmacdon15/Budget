@@ -53,7 +53,12 @@ export type ScannedFields = {
 /** One category's share of a receipt. */
 export type ReceiptSplit = { category: Category; amountCents: number };
 
-export type ScanResult = { recognised: boolean; fields: ScannedFields };
+export type ScanResult = {
+  recognised: boolean;
+  fields: ScannedFields;
+  /** True when the AI couldn't be reached, as opposed to the photo being unreadable. */
+  unavailable?: boolean;
+};
 
 /** What `POST /api/receipts` answers: the stored photo's pathname plus the reading. */
 export type ScanResponse = ScanResult & { image: string };

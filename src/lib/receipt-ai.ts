@@ -27,10 +27,10 @@ import type { ReceiptSplit, ScannedFields, ScanResult } from "@/lib/types";
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const GATEWAY_URL = "https://ai-gateway.vercel.sh/v1/messages";
 const API_VERSION = "2023-06-01";
-// Haiku is quick and cheap and reads printed receipts well. RECEIPT_VISION_MODEL
-// can point at a larger model if crumpled receipts come out wrong.
-export const ANTHROPIC_MODEL = "claude-haiku-5-5";
-export const GATEWAY_MODEL = "anthropic/claude-haiku-5.5";
+// Opus reads faded, crumpled and handwritten receipts best. RECEIPT_VISION_MODEL
+// can point at a smaller, quicker model (e.g. claude-haiku-5-5) instead.
+export const ANTHROPIC_MODEL = "claude-opus-5-5";
+export const GATEWAY_MODEL = "anthropic/claude-opus-5.5";
 const TOOL_NAME = "record_receipt";
 const RAW_TEXT_MAX = 4000;
 const MERCHANT_MAX = 120;
@@ -38,6 +38,13 @@ const MERCHANT_MAX = 120;
 export type { ScannedFields, ScanResult };
 
 export const NOT_RECOGNISED: ScanResult = { recognised: false, fields: {} };
+
+/** The reader couldn't be reached (no credentials, or the API refused). */
+export const UNAVAILABLE: ScanResult = {
+  recognised: false,
+  fields: {},
+  unavailable: true,
+};
 
 const CATEGORY_GUIDE = CATEGORIES.map((c) => `- ${c.name}: ${c.hint}`).join(
   "\n",
@@ -146,7 +153,7 @@ export async function readReceipt(
 ): Promise<ScanResult> {
   if (image.byteLength === 0) return NOT_RECOGNISED;
   const endpoint = await resolveEndpoint(deps);
-  if (!endpoint) return NOT_RECOGNISED;
+  if (!endpoint) return UNAVAILABLE;
 
   const response = await (deps.fetch ?? fetch)(endpoint.url, {
     method: "POST",
@@ -197,7 +204,10 @@ export async function readReceipt(
   return toScanResult(toolUse.input as Record<string, unknown>);
 }
 
-/** Never throws: a failed reading just means an empty form. */
+/**
+ * Never throws: a failed call comes back as `unavailable`, so the form can say
+ * reading is down rather than blaming the photo.
+ */
 export async function readReceiptSafely(
   image: Uint8Array,
   deps?: ReadDeps,
@@ -206,7 +216,7 @@ export async function readReceiptSafely(
     return await readReceipt(image, deps);
   } catch (error) {
     console.error("reading the receipt failed", error);
-    return NOT_RECOGNISED;
+    return UNAVAILABLE;
   }
 }
 

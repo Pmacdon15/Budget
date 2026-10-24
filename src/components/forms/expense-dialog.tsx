@@ -2,20 +2,23 @@
 
 import { Sparkles, Split } from "lucide-react";
 import { useState } from "react";
+import {
+  ReceiptPicker,
+  type ScannedReceipt,
+} from "@/components/receipt-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { type Category, isCategory } from "@/lib/categories";
 import { centsToInput } from "@/lib/money";
 import { currentMonth, today } from "@/lib/month";
 import { expenseWithReceiptSchema } from "@/lib/schemas";
-import type { Expense, ScanResponse } from "@/lib/types";
+import type { Expense } from "@/lib/types";
 import { useSaveExpense } from "@/mutations/expenses";
 import { CategorySelect, Field, MoneyInput } from "./fields";
 import { FieldError, FormDialog } from "./form-dialog";
 import { type SplitDraft, SplitEditor } from "./split-editor";
 
-/** A finished scan: what the server returned plus a local preview of the photo. */
-export type ScannedReceipt = ScanResponse & { previewUrl: string };
+export type { ScannedReceipt };
 
 const cents = (value: number | undefined) =>
   value === undefined ? "" : centsToInput(value);
@@ -23,7 +26,7 @@ const cents = (value: number | undefined) =>
 export function ExpenseDialog({
   month,
   expense,
-  scan,
+  scan: scanProp,
   trigger,
   open,
   onOpenChange,
@@ -38,6 +41,61 @@ export function ExpenseDialog({
 }) {
   const editing = Boolean(expense);
   const mutation = useSaveExpense(expense?.id);
+  // A new expense can also be scanned from inside the form.
+  const [scan, setScan] = useState(scanProp);
+
+  const description = editing
+    ? "One-off spending like groceries, gas or a night out."
+    : scan
+      ? scan.unavailable
+        ? "Receipt reading isn't available right now. Fill in the details; the photo is still saved with it."
+        : scan.recognised
+          ? "Read from your receipt — check the details, then save."
+          : "Couldn't make out this receipt. Fill in the details; the photo is still saved with it."
+      : "One-off spending like groceries, gas or a night out.";
+
+  return (
+    <FormDialog
+      trigger={trigger}
+      open={open}
+      onOpenChange={(next) => {
+        // Reopening "Add expense" starts blank again.
+        if (!next) setScan(scanProp);
+        onOpenChange?.(next);
+      }}
+      title={
+        editing ? "Edit expense" : scan ? "Scanned receipt" : "Add an expense"
+      }
+      description={description}
+      submitLabel={editing ? "Save changes" : "Add expense"}
+      successMessage={
+        editing ? "Expense updated" : scan ? "Receipt saved" : "Expense added"
+      }
+      schema={expenseWithReceiptSchema}
+      mutation={mutation}
+    >
+      {editing || scan ? null : <ReceiptPicker onScanned={setScan} />}
+      {/* Keyed so a new scan resets every field to what was read. */}
+      <ExpenseFields
+        key={scan?.image ?? "manual"}
+        month={month}
+        expense={expense}
+        scan={scan}
+      />
+    </FormDialog>
+  );
+}
+
+function ExpenseFields({
+  month,
+  expense,
+  scan,
+}: {
+  month: string;
+  expense?: Expense;
+  scan?: ScannedReceipt;
+}) {
+  const editing = Boolean(expense);
   const read = scan?.fields;
   const fallbackDate = month === currentMonth() ? today() : `${month}-01`;
   const defaultDate = expense?.spentOn ?? read?.purchasedOn ?? fallbackDate;
@@ -69,34 +127,8 @@ export function ExpenseDialog({
         },
       ];
 
-  const description = editing
-    ? "One-off spending like groceries, gas or a night out."
-    : scan
-      ? scan.recognised
-        ? "Read from your receipt — check the details, then save."
-        : "Couldn't read this receipt. Fill in the details and the photo is saved with it."
-      : "One-off spending like groceries, gas or a night out.";
-
   return (
-    <FormDialog
-      trigger={trigger}
-      open={open}
-      onOpenChange={(next) => {
-        // A fresh "Add expense" starts as a single category again.
-        if (!next) setSplitting(suggestedSplit);
-        onOpenChange?.(next);
-      }}
-      title={
-        editing ? "Edit expense" : scan ? "Scanned receipt" : "Add an expense"
-      }
-      description={description}
-      submitLabel={editing ? "Save changes" : "Add expense"}
-      successMessage={
-        editing ? "Expense updated" : scan ? "Receipt saved" : "Expense added"
-      }
-      schema={expenseWithReceiptSchema}
-      mutation={mutation}
-    >
+    <div className="contents">
       {scan ? (
         <div className="flex items-start gap-3 rounded-lg border bg-muted/40 p-2">
           {/* biome-ignore lint/performance/noImgElement: a local object URL, nothing for next/image to optimize. */}
@@ -226,6 +258,6 @@ export function ExpenseDialog({
           )}
         </Field>
       )}
-    </FormDialog>
+    </div>
   );
 }
