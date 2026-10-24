@@ -1,5 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { schemaStatements } from "../../scripts/schema";
 
 const target = vi.hoisted(() => ({
   db: undefined as { query: (sql: string) => Promise<unknown> } | undefined,
@@ -30,7 +31,7 @@ afterEach(async () => {
 });
 
 describe("scripts/migrate.ts", () => {
-  it("applies every statement in schema.sql to an empty database", async () => {
+  it("applies every statement in the schema to an empty database", async () => {
     const db = new PGlite();
     target.db = db;
     vi.stubEnv("DATABASE_URL", "postgres://neon.test/budget");
@@ -39,17 +40,17 @@ describe("scripts/migrate.ts", () => {
     await runMigrate();
 
     expect(target.urls).toEqual(["postgres://neon.test/budget"]);
-    expect(log).toHaveBeenCalledWith("[migrate] Applied 10 statements.");
+    expect(log).toHaveBeenCalledWith(
+      `[migrate] Applied ${schemaStatements().length} statements.`,
+    );
     const { rows } = await db.query<{ table_name: string }>(
       `select table_name from information_schema.tables
        where table_schema = 'public' order by table_name`,
     );
-    expect(rows.map((r) => r.table_name)).toEqual([
-      "expenses",
-      "fixed_items",
-      "income",
-      "receipts",
-    ]);
+    // The original tables; migrations may add more.
+    expect(rows.map((r) => r.table_name)).toEqual(
+      expect.arrayContaining(["expenses", "fixed_items", "income", "receipts"]),
+    );
   });
 
   it("is safe to run again on an existing database", async () => {
