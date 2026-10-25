@@ -4,6 +4,7 @@ import { CategoryBars } from "@/components/charts/category-bars";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { PrintButton } from "@/components/print-button";
+import { TaxCard } from "@/components/report/tax-card";
 import { SplitCardsSkeleton, TextSkeleton } from "@/components/skeletons";
 import { buttonVariants } from "@/components/ui/button";
 import {
@@ -79,6 +80,8 @@ export default function ReportPage({
       <Suspense fallback={<SplitCardsSkeleton />}>
         <Report month={month} />
       </Suspense>
+
+      <TaxCard month={month} className="mt-4" />
     </>
   );
 }
