@@ -9,13 +9,20 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { type Category, isCategory } from "@/lib/categories";
+import { rememberedCategory } from "@/lib/merchant-memory";
 import { centsToInput } from "@/lib/money";
-import { currentMonth, today } from "@/lib/month";
+import { currentMonth, monthLabel, monthOfDate, today } from "@/lib/month";
 import { expenseWithReceiptSchema } from "@/lib/schemas";
 import type { Expense } from "@/lib/types";
+import {
+  DuplicateExpenseError,
+  useAddExpenseWarningDuplicates,
+} from "@/mutations/duplicate-expenses";
 import { useSaveExpense } from "@/mutations/expenses";
+import { useMerchantMemory } from "@/queries/merchant-memory";
 import { CategorySelect, Field, MoneyInput } from "./fields";
 import { FieldError, FormDialog } from "./form-dialog";
+import { MerchantCategoryHint } from "./merchant-category-hint";
 import { type SplitDraft, SplitEditor } from "./split-editor";
 
 export type { ScannedReceipt };
@@ -40,7 +47,11 @@ export function ExpenseDialog({
   onOpenChange?: (open: boolean) => void;
 }) {
   const editing = Boolean(expense);
-  const mutation = useSaveExpense(expense?.id);
+  const save = useSaveExpense(expense?.id);
+  // A new expense is checked against saved ones first; see duplicate-expenses.
+  const add = useAddExpenseWarningDuplicates();
+  const mutation = editing ? save : add;
+  const duplicate = mutation.error instanceof DuplicateExpenseError;
   // A new expense can also be scanned from inside the form.
   const [scan, setScan] = useState(scanProp);
 
@@ -67,7 +78,9 @@ export function ExpenseDialog({
         editing ? "Edit expense" : scan ? "Scanned receipt" : "Add an expense"
       }
       description={description}
-      submitLabel={editing ? "Save changes" : "Add expense"}
+      submitLabel={
+        editing ? "Save changes" : duplicate ? "Save anyway" : "Add expense"
+      }
       successMessage={
         editing ? "Expense updated" : scan ? "Receipt saved" : "Expense added"
       }
@@ -98,7 +111,12 @@ function ExpenseFields({
   const editing = Boolean(expense);
   const read = scan?.fields;
   const fallbackDate = month === currentMonth() ? today() : `${month}-01`;
-  const defaultDate = expense?.spentOn ?? read?.purchasedOn ?? fallbackDate;
+  // A scanned receipt counts in the month of the date read off it, never the
+  // month on screen. When no date could be read there is no honest default:
+  // the field starts empty and the form asks for the receipt's date, rather
+  // than silently filing the receipt under the month being viewed.
+  const defaultDate =
+    expense?.spentOn ?? (scan ? (read?.purchasedOn ?? "") : fallbackDate);
 
   const defaultAmount = expense
     ? centsToInput(expense.amountCents)
@@ -111,6 +129,18 @@ function ExpenseFields({
     "Groceries";
   const suggestedSplit = !editing && (read?.splits?.length ?? 0) > 1;
 
+  // Merchant memory: a new expense starts on the category picked last time
+  // for this merchant, until the user picks one themselves.
+  const [descriptionText, setDescriptionText] = useState(
+    expense?.description ?? read?.merchant ?? "",
+  );
+  const { data: memory } = useMerchantMemory(!editing);
+  const suggestion = editing
+    ? undefined
+    : rememberedCategory(memory, descriptionText, read?.merchant);
+  const [picked, setPicked] = useState<Category | null>(null);
+  const category = picked ?? suggestion?.category ?? defaultCategory;
+
   // The total as typed, so the split editor can show what's left to assign.
   const [total, setTotal] = useState(defaultAmount ?? "");
   const [splitting, setSplitting] = useState(suggestedSplit);
@@ -120,9 +150,9 @@ function ExpenseFields({
         amount: centsToInput(s.amountCents),
       }))
     : [
-        { category: defaultCategory, amount: total },
+        { category, amount: total },
         {
-          category: defaultCategory === "Alcohol" ? "Groceries" : "Alcohol",
+          category: category === "Alcohol" ? "Groceries" : "Alcohol",
           amount: "",
         },
       ];
@@ -161,6 +191,19 @@ function ExpenseFields({
                   : null}
               </span>
             ) : null}
+            {read?.purchasedOn && monthOfDate(read.purchasedOn) !== month ? (
+              <span className="text-muted-foreground">
+                Dated {read.purchasedOn} — counts in{" "}
+                {monthLabel(monthOfDate(read.purchasedOn))}, not{" "}
+                {monthLabel(month)}.
+              </span>
+            ) : null}
+            {!read?.purchasedOn ? (
+              <span className="text-muted-foreground">
+                No date could be read — enter the date on the receipt so it
+                counts in the right month.
+              </span>
+            ) : null}
           </div>
           <input type="hidden" name="receiptImage" value={scan.image} />
           <input
@@ -197,6 +240,7 @@ function ExpenseFields({
           name="description"
           placeholder="Costco run"
           defaultValue={expense?.description ?? read?.merchant}
+          onChange={(e) => setDescriptionText(e.target.value)}
           required
           autoFocus
         />
@@ -242,9 +286,16 @@ function ExpenseFields({
         <Field label="Category" htmlFor="expense-category">
           <CategorySelect
             id="expense-category"
-            defaultValue={defaultCategory}
+            value={category}
+            onValueChange={setPicked}
           />
           <FieldError name="category" />
+          <MerchantCategoryHint
+            suggestion={suggestion}
+            current={category}
+            readerGuess={read?.category}
+            onUse={setPicked}
+          />
           {editing ? null : (
             <Button
               type="button"

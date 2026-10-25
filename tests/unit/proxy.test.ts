@@ -93,6 +93,10 @@ describe("proxy (Clerk middleware)", () => {
         "/logo.png",
         "/styles.css",
         "/budget.csv",
+        // The PWA manifest and its icons must load without signing in.
+        "/manifest.webmanifest",
+        "/icon.svg",
+        "/apple-icon.png",
       ]) {
         expect(pages?.test(path)).toBe(false);
       }
