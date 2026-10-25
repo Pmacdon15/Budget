@@ -5,6 +5,7 @@ import {
   formatMoneyCompact,
   formatPercent,
   parseMoney,
+  parseSignedMoney,
 } from "@/lib/money";
 
 // Intl output can use narrow/non-breaking spaces; compare on plain spaces.
@@ -65,10 +66,52 @@ describe("parseMoney", () => {
   });
 });
 
+describe("parseSignedMoney", () => {
+  it.each([
+    ["1250.50", 125_050],
+    ["$1,250.50", 125_050],
+    ["0", 0],
+    ["-0", 0],
+    ["-5", -500],
+    ["-123.45", -12_345],
+    ["-$123.45", -12_345],
+    ["$-123.45", -12_345],
+    [" - 75 ", -7_500],
+    ["−123.45", -12_345],
+    ["–42", -4_200],
+    ["-1,250", -125_000],
+  ])("parses %j as %i cents", (input, cents) => {
+    expect(parseSignedMoney(input)).toBe(cents);
+  });
+
+  it.each([
+    "",
+    "-",
+    "--5",
+    "-$-5",
+    "$$5",
+    "5-",
+    "-1.234",
+    "abc",
+    "+5",
+  ])("rejects %j", (input) => {
+    expect(parseSignedMoney(input)).toBeNull();
+  });
+
+  it("never returns negative zero", () => {
+    expect(Object.is(parseSignedMoney("-0.00"), 0)).toBe(true);
+  });
+});
+
 describe("centsToInput", () => {
   it("turns cents into an editable two-decimal string", () => {
     expect(centsToInput(125_050)).toBe("1250.50");
     expect(centsToInput(7)).toBe("0.07");
+  });
+
+  it("keeps the minus on a negative amount", () => {
+    expect(centsToInput(-12_345)).toBe("-123.45");
+    expect(parseSignedMoney(centsToInput(-12_345))).toBe(-12_345);
   });
 });
 
