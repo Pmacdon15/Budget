@@ -31,7 +31,7 @@ function toDateString(value: unknown): string {
 const nullableNumber = (value: unknown) =>
   value == null ? null : Number(value);
 
-const toExpense = (r: Row): Expense => ({
+export const toExpense = (r: Row): Expense => ({
   id: r.id,
   month: String(r.month),
   spentOn: toDateString(r.spent_on),
