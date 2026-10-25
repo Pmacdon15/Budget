@@ -5,13 +5,18 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getBankBalance } from "@/dal/bank-balance";
-import { balanceUpdatedLabel, isOverdrawn } from "@/lib/bank-balance";
+import {
+  balanceDebitLabel,
+  balanceUpdatedLabel,
+  isOverdrawn,
+} from "@/lib/bank-balance";
 import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { BankBalanceActions } from "./bank-balance-actions";
 
 /**
- * What's in the bank right now, as the user last entered it. It isn't tied to
+ * What's in the bank right now: the balance the user last entered, less the
+ * expenses added since. It isn't tied to
  * the month being viewed, but its holes still wait for the URL (`month`) first
  * and only then read the session and database, so the static shell never needs
  * either. The frame and label are in the shell; both holes share one read
@@ -75,13 +80,17 @@ async function BalanceValue({ month }: Props) {
 async function BalanceDetails({ month }: Props) {
   await month;
   const balance = await getBankBalance();
+  const debit = balance ? balanceDebitLabel(balance) : null;
   return (
     <div className="flex flex-1 flex-wrap items-center justify-between gap-3">
-      <p className="text-muted-foreground text-sm">
-        {balance
-          ? balanceUpdatedLabel(balance.updatedAt)
-          : "Add what's in your account now. Negative is fine if you're overdrawn."}
-      </p>
+      <div className="text-muted-foreground text-sm">
+        <p>
+          {balance
+            ? balanceUpdatedLabel(balance.updatedAt)
+            : "Add what's in your account now. Negative is fine if you're overdrawn."}
+        </p>
+        {debit ? <p>{debit}</p> : null}
+      </div>
       <BankBalanceActions balance={balance} />
     </div>
   );

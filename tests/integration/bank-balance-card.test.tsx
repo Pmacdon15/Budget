@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { setBankBalance } from "@/actions/bank-balance";
+import { createExpense } from "@/actions/expenses";
 import OverviewPage from "@/app/(app)/page";
 import { signInAs } from "../helpers/auth";
 import {
@@ -9,6 +10,7 @@ import {
   searchParams,
   textOf,
 } from "../helpers/render-page";
+import { rows } from "../helpers/test-db";
 
 const render = async (month = "2026-10") =>
   textOf(await renderPage(OverviewPage({ searchParams: searchParams(month) })));
@@ -57,5 +59,26 @@ describe("Bank balance on the Overview", () => {
     const text = await render();
     expect(text).not.toContain("$999.00");
     expect(text).toContain("Add balance");
+  });
+
+  it("shows expenses added since the balance coming off it", async () => {
+    await setBankBalance({ balance: "1000" });
+    await rows(
+      "update bank_balances set updated_at = now() - interval '1 hour'",
+    );
+    await createExpense({
+      description: "Shell",
+      category: "Transportation",
+      amount: "40",
+      spentOn: "2026-10-20",
+    });
+    const text = (await render()).replace(/\s/g, " ");
+    expect(text).toContain("$960.00");
+    expect(text).toContain("Entered $1,000.00, less $40.00 spent since");
+  });
+
+  it("doesn't mention spending when nothing has come off", async () => {
+    await setBankBalance({ balance: "1000" });
+    expect(await render()).not.toContain("spent since");
   });
 });

@@ -8,6 +8,7 @@ A personal monthly budgeting app — live at **[budget.patmac.ca](https://budget
   - **Scan receipt** — take a photo with the camera or pick one, from the Spending page or inside any Add expense form; AI reads the store, date, total, tax and category and pre-fills the expense for you to confirm. A receipt with things from several categories (groceries and beer, say) is split into one expense per category; the AI suggests the split and you can adjust it. Any new expense can be split by hand too. The photo and everything read off it are saved with the expense (📎 opens it).
   - **Download** — expenses as **CSV**, **Excel** or **PDF** for any month range, with checkboxes to choose the categories. PDFs can include the receipt photos.
 - **Overview** — this month at a glance: take-home, bills, spending, what's left, a 12-month history chart and a category breakdown.
+- **Bank balance** — enter what your account shows (negative is fine when overdrawn). Every expense you add after that comes off it, so the card shows what's left in the bank, with a line like "Entered $1,000.00, less $40.00 spent since". Editing, deleting or undoing an expense keeps it right, because the debit is worked out from the expenses that exist now. Expenses added before you entered the balance are already in your bank's number, so entering a new balance starts fresh and nothing is taken off twice.
 - **Monthly report** — summary vs. last month and your 12-month average, category breakdown, every line item, plus **Print / PDF** and **CSV** export.
 
 ## Stack

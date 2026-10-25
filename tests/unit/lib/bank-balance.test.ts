@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  balanceDebitLabel,
   balanceUpdatedLabel,
   bankBalanceSchema,
   isOverdrawn,
@@ -73,11 +74,11 @@ describe("other amounts stay positive", () => {
 });
 
 describe("isOverdrawn", () => {
-  const at = "2026-10-25T20:52:00.000Z";
+  const _at = "2026-10-25T20:52:00.000Z";
   it("is true only below zero", () => {
-    expect(isOverdrawn({ balanceCents: -1, updatedAt: at })).toBe(true);
-    expect(isOverdrawn({ balanceCents: 0, updatedAt: at })).toBe(false);
-    expect(isOverdrawn({ balanceCents: 1, updatedAt: at })).toBe(false);
+    expect(isOverdrawn({ balanceCents: -1 })).toBe(true);
+    expect(isOverdrawn({ balanceCents: 0 })).toBe(false);
+    expect(isOverdrawn({ balanceCents: 1 })).toBe(false);
   });
 });
 
@@ -87,5 +88,32 @@ describe("balanceUpdatedLabel", () => {
     expect(plain(balanceUpdatedLabel("2026-10-25T20:52:00.000Z"))).toMatch(
       /^Updated Oct 25, 2:52 p\.m\.$/,
     );
+  });
+});
+
+describe("balanceDebitLabel", () => {
+  const at = "2026-10-25T20:52:00.000Z";
+  it("says what was entered and what has come off since", () => {
+    expect(
+      plain(
+        balanceDebitLabel({
+          balanceCents: 96_000,
+          enteredCents: 100_000,
+          spentSinceCents: 4_000,
+          updatedAt: at,
+        }) ?? "",
+      ),
+    ).toBe("Entered $1,000.00, less $40.00 spent since");
+  });
+
+  it("is empty when nothing has been spent since", () => {
+    expect(
+      balanceDebitLabel({
+        balanceCents: 100_000,
+        enteredCents: 100_000,
+        spentSinceCents: 0,
+        updatedAt: at,
+      }),
+    ).toBeNull();
   });
 });
