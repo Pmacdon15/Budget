@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
+import { CategoryBudgetsCard } from "@/components/budgets/category-budgets-card";
 import { HistoryChart } from "@/components/charts/history-chart";
 import { SpendingDonut } from "@/components/charts/spending-donut";
 import { Delta } from "@/components/delta";
@@ -134,6 +135,8 @@ export default function OverviewPage({
           </CardContent>
         </Card>
       </div>
+
+      <CategoryBudgetsCard month={month} className="mt-4" />
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <Card>
