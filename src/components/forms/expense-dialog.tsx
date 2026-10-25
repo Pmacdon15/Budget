@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { type Category, isCategory } from "@/lib/categories";
 import { rememberedCategory } from "@/lib/merchant-memory";
 import { centsToInput } from "@/lib/money";
-import { currentMonth, today } from "@/lib/month";
+import { currentMonth, monthLabel, monthOfDate, today } from "@/lib/month";
 import { expenseWithReceiptSchema } from "@/lib/schemas";
 import type { Expense } from "@/lib/types";
 import {
@@ -111,7 +111,12 @@ function ExpenseFields({
   const editing = Boolean(expense);
   const read = scan?.fields;
   const fallbackDate = month === currentMonth() ? today() : `${month}-01`;
-  const defaultDate = expense?.spentOn ?? read?.purchasedOn ?? fallbackDate;
+  // A scanned receipt counts in the month of the date read off it, never the
+  // month on screen. When no date could be read there is no honest default:
+  // the field starts empty and the form asks for the receipt's date, rather
+  // than silently filing the receipt under the month being viewed.
+  const defaultDate =
+    expense?.spentOn ?? (scan ? (read?.purchasedOn ?? "") : fallbackDate);
 
   const defaultAmount = expense
     ? centsToInput(expense.amountCents)
@@ -184,6 +189,19 @@ function ExpenseFields({
                 {read?.taxCents !== undefined
                   ? `Tax $${cents(read.taxCents)}`
                   : null}
+              </span>
+            ) : null}
+            {read?.purchasedOn && monthOfDate(read.purchasedOn) !== month ? (
+              <span className="text-muted-foreground">
+                Dated {read.purchasedOn} — counts in{" "}
+                {monthLabel(monthOfDate(read.purchasedOn))}, not{" "}
+                {monthLabel(month)}.
+              </span>
+            ) : null}
+            {!read?.purchasedOn ? (
+              <span className="text-muted-foreground">
+                No date could be read — enter the date on the receipt so it
+                counts in the right month.
               </span>
             ) : null}
           </div>

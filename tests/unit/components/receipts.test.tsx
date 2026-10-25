@@ -113,7 +113,144 @@ describe("ExpenseDialog with a scanned receipt", () => {
     expect(dialog).toHaveTextContent("Couldn't make out this receipt");
     expect(dialog).toHaveTextContent("Photo attached");
     expect(within(dialog).getByLabelText("Description")).toHaveValue("");
-    expect(within(dialog).getByLabelText("Date")).toHaveValue("2026-10-23");
+    // No date was read, so the date is NOT filled in from the month on
+    // screen: the user picks the receipt's date instead of the expense
+    // silently counting in the wrong month.
+    expect(within(dialog).getByLabelText("Date")).toHaveValue("");
+    expect(dialog).toHaveTextContent("No date could be read");
+  });
+});
+
+describe("which month a scanned receipt counts in", () => {
+  it("files the receipt under its own date, not the month being viewed", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(
+      <ExpenseDialog
+        month="2026-09"
+        scan={scan()}
+        open
+        onOpenChange={() => {}}
+      />,
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByLabelText("Date")).toHaveValue("2026-10-05");
+    expect(dialog).toHaveTextContent(
+      "Dated 2026-10-05 — counts in October 2026, not September 2026.",
+    );
+
+    await user.click(
+      within(dialog).getByRole("button", { name: "Add expense" }),
+    );
+    await waitFor(() =>
+      expect(expenseActions.createExpense).toHaveBeenCalledWith(
+        expect.objectContaining({ spentOn: "2026-10-05" }),
+      ),
+    );
+  });
+
+  it("scan button: a receipt from another month keeps its date", async () => {
+    const user = userEvent.setup();
+    vi.mocked(compressImage).mockResolvedValue(new Blob(["jpeg"]));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          image: PHOTO,
+          recognised: true,
+          fields: {
+            merchant: "Costco",
+            purchasedOn: "2026-10-05",
+            totalCents: 11_300,
+            category: "Groceries",
+          },
+        }),
+      ),
+    );
+    renderWithQuery(<ScanReceiptButton month="2026-09" />);
+    await user.upload(
+      screen.getByLabelText("Choose a photo of the receipt"),
+      new File(["raw"], "receipt.jpg", { type: "image/jpeg" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByLabelText("Date")).toHaveValue("2026-10-05");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Add expense" }),
+    );
+    await waitFor(() =>
+      expect(expenseActions.createExpense).toHaveBeenCalledWith(
+        expect.objectContaining({ spentOn: "2026-10-05" }),
+      ),
+    );
+  });
+
+  it("in-form scan: a receipt from another month keeps its date", async () => {
+    const user = userEvent.setup();
+    vi.mocked(compressImage).mockResolvedValue(new Blob(["jpeg"]));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          image: PHOTO,
+          recognised: true,
+          fields: {
+            merchant: "Costco",
+            purchasedOn: "2026-10-05",
+            totalCents: 11_300,
+            category: "Groceries",
+          },
+        }),
+      ),
+    );
+    renderWithQuery(
+      <ExpenseDialog
+        month="2026-09"
+        trigger={<button type="button">Add</button>}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.upload(
+      within(dialog).getByLabelText("Choose a photo of the receipt"),
+      new File(["raw"], "receipt.jpg", { type: "image/jpeg" }),
+    );
+    await waitFor(() =>
+      expect(within(dialog).getByLabelText("Date")).toHaveValue("2026-10-05"),
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Add expense" }),
+    );
+    await waitFor(() =>
+      expect(expenseActions.createExpense).toHaveBeenCalledWith(
+        expect.objectContaining({ spentOn: "2026-10-05" }),
+      ),
+    );
+  });
+
+  it("asks for the date when none could be read, then files under it", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(
+      <ExpenseDialog
+        month="2026-09"
+        scan={scan({ recognised: false, fields: {} })}
+        open
+        onOpenChange={() => {}}
+      />,
+    );
+    const dialog = await screen.findByRole("dialog");
+    const date = within(dialog).getByLabelText("Date");
+    expect(date).toHaveValue("");
+
+    await user.type(within(dialog).getByLabelText("Description"), "Costco");
+    await user.type(within(dialog).getByLabelText("Amount"), "25.00");
+    await user.type(date, "2026-10-05");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Add expense" }),
+    );
+    await waitFor(() =>
+      expect(expenseActions.createExpense).toHaveBeenCalledWith(
+        expect.objectContaining({ spentOn: "2026-10-05" }),
+      ),
+    );
   });
 });
 
@@ -332,6 +469,7 @@ describe("splitting a receipt across categories", () => {
         scan={scan({
           fields: {
             merchant: "Superstore",
+            purchasedOn: "2026-10-05",
             totalCents: 11_300,
             category: "Groceries",
             splits: [
@@ -525,6 +663,11 @@ describe("scanning with the camera or the photo library", () => {
       "Scanned receipt",
     );
     expect(dialog).not.toHaveTextContent("Have a receipt?");
+
+    // No date was read off this receipt, so the form asks for it instead of
+    // counting the expense in the month on screen.
+    expect(within(dialog).getByLabelText("Date")).toHaveValue("");
+    await user.type(within(dialog).getByLabelText("Date"), "2026-10-05");
 
     await user.click(
       within(dialog).getByRole("button", { name: "Add expense" }),
