@@ -25,6 +25,24 @@ export function parseMoney(input: string): number | null {
   return Math.round(Number.parseFloat(cleaned) * 100);
 }
 
+/**
+ * Like `parseMoney`, but also takes a leading minus for amounts below zero,
+ * such as an overdrawn bank balance: "-123.45", "-$123.45" and "$-123.45" all
+ * give -12345. Accepts the Unicode minus (−) and en dash (–) some keyboards
+ * type instead of "-". Returns null when invalid.
+ */
+export function parseSignedMoney(input: string): number | null {
+  const cleaned = input.replace(/[\s,]/g, "").replace(/[−–]/g, "-");
+  const match = /^(-?)\$?(-?)(.*)$/.exec(cleaned);
+  if (!match) return null;
+  const [, before, after, rest] = match;
+  if (before && after) return null;
+  if (rest.startsWith("$")) return null;
+  const cents = parseMoney(rest);
+  if (cents === null) return null;
+  return before || after ? -cents || 0 : cents;
+}
+
 export function centsToInput(cents: number) {
   return (cents / 100).toFixed(2);
 }
