@@ -134,7 +134,12 @@ describe("merchant memory in the expense form", () => {
       image: PHOTO,
       recognised: true,
       previewUrl: "blob:preview",
-      fields: { merchant: "COSTCO", totalCents: 5_000, category: "Groceries" },
+      fields: {
+        merchant: "COSTCO",
+        purchasedOn: "2026-10-05",
+        totalCents: 5_000,
+        category: "Groceries",
+      },
     };
     const user = userEvent.setup();
     renderWithQuery(
@@ -169,7 +174,12 @@ describe("merchant memory in the expense form", () => {
       image: PHOTO,
       recognised: true,
       previewUrl: "blob:preview",
-      fields: { merchant: "Shell", totalCents: 5_000, category: "Auto" },
+      fields: {
+        merchant: "Shell",
+        purchasedOn: "2026-10-05",
+        totalCents: 5_000,
+        category: "Auto",
+      },
     };
     const user = userEvent.setup();
     renderWithQuery(
