@@ -4,6 +4,7 @@ import {
   CalendarRange,
   FileText,
   LayoutDashboard,
+  PiggyBank,
   Receipt,
   ReceiptText,
   Wallet,
@@ -18,6 +19,7 @@ const LINKS = [
   { href: "/income", label: "Take-home", icon: Wallet },
   { href: "/expenses", label: "Spending", icon: Receipt },
   { href: "/receipts", label: "Receipts", icon: ReceiptText },
+  { href: "/goals", label: "Goals", icon: PiggyBank },
   { href: "/report", label: "Report", icon: FileText },
 ] as const;
 
