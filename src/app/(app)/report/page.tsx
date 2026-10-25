@@ -1,4 +1,5 @@
-import { Download, FileText } from "lucide-react";
+import { CalendarDays, Download, FileText } from "lucide-react";
+import Link from "next/link";
 import { Suspense } from "react";
 import { CategoryBars } from "@/components/charts/category-bars";
 import { EmptyState } from "@/components/empty-state";
@@ -70,6 +71,22 @@ export default function ReportPage({
             <a href={`/report/csv?month=${m}`} className={csvClass}>
               <Download /> CSV
             </a>
+          ))}
+        </Suspense>
+        <Suspense
+          fallback={
+            <Link href="/report/year" className={csvClass}>
+              <CalendarDays /> Year view
+            </Link>
+          }
+        >
+          {month.then((m) => (
+            <Link
+              href={`/report/year?year=${m.slice(0, 4)}`}
+              className={csvClass}
+            >
+              <CalendarDays /> Year view
+            </Link>
           ))}
         </Suspense>
         <div className="print:hidden">
