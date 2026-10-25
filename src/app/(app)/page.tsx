@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
+import { BankBalanceCard } from "@/components/bank-balance/bank-balance-card";
 import { CategoryBudgetsCard } from "@/components/budgets/category-budgets-card";
 import { HistoryChart } from "@/components/charts/history-chart";
 import { SpendingDonut } from "@/components/charts/spending-donut";
@@ -103,6 +104,8 @@ export default function OverviewPage({
           <LeftOverStat month={month} />
         </Suspense>
       </div>
+
+      <BankBalanceCard month={month} />
 
       <SafeToSpend month={month} />
 
