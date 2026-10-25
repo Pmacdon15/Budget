@@ -14,6 +14,10 @@ import { centsToInput } from "@/lib/money";
 import { currentMonth, today } from "@/lib/month";
 import { expenseWithReceiptSchema } from "@/lib/schemas";
 import type { Expense } from "@/lib/types";
+import {
+  DuplicateExpenseError,
+  useAddExpenseWarningDuplicates,
+} from "@/mutations/duplicate-expenses";
 import { useSaveExpense } from "@/mutations/expenses";
 import { useMerchantMemory } from "@/queries/merchant-memory";
 import { CategorySelect, Field, MoneyInput } from "./fields";
@@ -43,7 +47,11 @@ export function ExpenseDialog({
   onOpenChange?: (open: boolean) => void;
 }) {
   const editing = Boolean(expense);
-  const mutation = useSaveExpense(expense?.id);
+  const save = useSaveExpense(expense?.id);
+  // A new expense is checked against saved ones first; see duplicate-expenses.
+  const add = useAddExpenseWarningDuplicates();
+  const mutation = editing ? save : add;
+  const duplicate = mutation.error instanceof DuplicateExpenseError;
   // A new expense can also be scanned from inside the form.
   const [scan, setScan] = useState(scanProp);
 
@@ -70,7 +78,9 @@ export function ExpenseDialog({
         editing ? "Edit expense" : scan ? "Scanned receipt" : "Add an expense"
       }
       description={description}
-      submitLabel={editing ? "Save changes" : "Add expense"}
+      submitLabel={
+        editing ? "Save changes" : duplicate ? "Save anyway" : "Add expense"
+      }
       successMessage={
         editing ? "Expense updated" : scan ? "Receipt saved" : "Expense added"
       }
