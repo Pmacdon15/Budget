@@ -5,6 +5,8 @@ const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/welcome",
+  // Vercel Cron jobs. Each route checks CRON_SECRET itself.
+  "/api/cron/(.*)",
 ]);
 const isHome = createRouteMatcher(["/"]);
 

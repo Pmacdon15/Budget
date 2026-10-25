@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isOwnReceiptImagePathname,
+  isReceiptImagePathname,
   newReceiptImagePathname,
 } from "@/lib/receipt-image";
 
@@ -31,5 +32,20 @@ describe("receipt photo pathnames", () => {
     ).toBe(false);
     expect(isOwnReceiptImagePathname(42, "user_a")).toBe(false);
     expect(isOwnReceiptImagePathname(own, "user/a")).toBe(false);
+  });
+
+  it("recognises any user's minted pathname, and nothing else", () => {
+    const own = newReceiptImagePathname("user_a");
+    expect(isReceiptImagePathname(own)).toBe(true);
+    expect(isReceiptImagePathname(newReceiptImagePathname("user_b"))).toBe(
+      true,
+    );
+    expect(isReceiptImagePathname("receipts/user_a/notes.txt")).toBe(false);
+    expect(isReceiptImagePathname(`${own}/extra`)).toBe(false);
+    expect(isReceiptImagePathname(own.replace("receipts/", "other/"))).toBe(
+      false,
+    );
+    expect(isReceiptImagePathname("receipts/user_a")).toBe(false);
+    expect(isReceiptImagePathname(null)).toBe(false);
   });
 });

@@ -45,6 +45,8 @@ describe("proxy (Clerk middleware)", () => {
     "/expenses",
     "/report",
     "/report/csv",
+    "/api/receipts",
+    "/api/cronjob",
   ])("requires sign-in for %s", async (path) => {
     const { protect } = await visit(path);
     expect(protect).toHaveBeenCalledOnce();
@@ -56,6 +58,8 @@ describe("proxy (Clerk middleware)", () => {
     "/sign-up",
     "/sign-up/verify",
     "/welcome",
+    // Vercel Cron; the route checks CRON_SECRET itself.
+    "/api/cron/receipt-photos",
   ])("leaves %s public", async (path) => {
     const { protect } = await visit(path);
     expect(protect).not.toHaveBeenCalled();

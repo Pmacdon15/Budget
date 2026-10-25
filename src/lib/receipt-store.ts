@@ -1,5 +1,5 @@
 import "server-only";
-import { del, get, put } from "@vercel/blob";
+import { del, get, list, put } from "@vercel/blob";
 import { IMAGE_CONTENT_TYPE } from "@/lib/receipt-image";
 
 /**
@@ -32,4 +32,26 @@ export async function deleteReceiptImage(pathname: string) {
   } catch (error) {
     console.error("deleting a receipt photo failed", error);
   }
+}
+
+export type StoredReceiptImage = { pathname: string; uploadedAt: Date };
+
+/** One page (up to 1,000) of every user's receipt photos, for the cleanup job. */
+export async function listReceiptImages(cursor?: string): Promise<{
+  images: StoredReceiptImage[];
+  cursor?: string;
+}> {
+  const page = await list({ prefix: "receipts/", cursor, limit: 1000 });
+  return {
+    images: page.blobs.map(({ pathname, uploadedAt }) => ({
+      pathname,
+      uploadedAt: new Date(uploadedAt),
+    })),
+    cursor: page.hasMore ? page.cursor : undefined,
+  };
+}
+
+/** Removes several photos in one request. Throws so the cleanup job can report it. */
+export async function deleteReceiptImages(pathnames: string[]) {
+  if (pathnames.length > 0) await del(pathnames);
 }
