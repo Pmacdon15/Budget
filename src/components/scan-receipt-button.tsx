@@ -24,22 +24,29 @@ export { scanReceipt } from "@/components/receipt-picker";
 export function ScanReceiptButton({ month }: { month: string }) {
   const [scan, setScan] = useState<ScannedReceipt | null>(null);
   const [open, setOpen] = useState(false);
-  const { scanning, inputs, takePhoto, choosePhoto } = useReceiptPicker(
-    (result) => {
+  const { scanning, limited, inputs, takePhoto, choosePhoto } =
+    useReceiptPicker((result) => {
       if (scan) URL.revokeObjectURL(scan.previewUrl);
       setScan(result);
       setOpen(true);
-    },
-  );
+    });
 
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
-            <Button variant="outline" disabled={scanning}>
+            <Button
+              variant="outline"
+              disabled={scanning || limited != null}
+              title={limited ?? undefined}
+            >
               {scanning ? <Loader2 className="animate-spin" /> : <Camera />}
-              {scanning ? "Reading receipt…" : "Scan receipt"}
+              {scanning
+                ? "Reading receipt…"
+                : limited
+                  ? "Scan limit reached"
+                  : "Scan receipt"}
             </Button>
           }
         />
@@ -53,6 +60,7 @@ export function ScanReceiptButton({ month }: { month: string }) {
         </DropdownMenuContent>
       </DropdownMenu>
       {inputs}
+      {limited ? <output className="sr-only">{limited}</output> : null}
       {scan ? (
         <ExpenseDialog
           key={scan.image}

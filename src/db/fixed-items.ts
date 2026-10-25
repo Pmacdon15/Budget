@@ -69,7 +69,8 @@ export async function updateFixedItemValues(
 
 /**
  * Ends an item at `endMonth` and inserts its replacement from `startMonth`,
- * atomically, so past months keep the old values.
+ * atomically, so past months keep the old values. Months already marked paid
+ * from `startMonth` on move to the replacement.
  */
 export async function splitFixedItem(
   userId: string,
@@ -83,9 +84,16 @@ export async function splitFixedItem(
   await db().transaction((sql) => [
     sql`update fixed_items set end_month = ${endMonth} where id = ${id} and user_id = ${userId}`,
     sql`
-      insert into fixed_items (user_id, name, category, amount_cents, due_day, start_month, end_month)
-      values (${userId}, ${replacement.name}, ${replacement.category}, ${replacement.amountCents},
-              ${replacement.dueDay}, ${replacement.startMonth}, ${replacement.endMonth})
+      with replacement as (
+        insert into fixed_items (user_id, name, category, amount_cents, due_day, start_month, end_month)
+        values (${userId}, ${replacement.name}, ${replacement.category}, ${replacement.amountCents},
+                ${replacement.dueDay}, ${replacement.startMonth}, ${replacement.endMonth})
+        returning id
+      )
+      update fixed_item_payments p set fixed_item_id = replacement.id
+      from replacement
+      where p.fixed_item_id = ${id} and p.user_id = ${userId}
+        and p.month >= ${replacement.startMonth}
     `,
   ]);
 }
