@@ -142,5 +142,10 @@ describe.skipIf(!built && !process.env.REQUIRE_BUILD)(
         expect(symbolFor(manifest.routes[route]), route).toBe("○");
       }
     });
+
+    it("prerenders the PWA manifest at build time", () => {
+      // A request-time read here would make every install fetch hit the server.
+      expect(manifest.routes["/manifest.webmanifest"]).toBeDefined();
+    });
   },
 );
