@@ -18,6 +18,7 @@ import { ExpenseDialog } from "@/components/forms/expense-dialog";
 import { FixedItemDialog } from "@/components/forms/fixed-item-dialog";
 import { IncomeDialog } from "@/components/forms/income-dialog";
 import { PageHeader } from "@/components/page-header";
+import { SafeToSpend } from "@/components/safe-to-spend";
 import {
   ActionsSkeleton,
   ChartSkeleton,
@@ -102,6 +103,8 @@ export default function OverviewPage({
           <LeftOverStat month={month} />
         </Suspense>
       </div>
+
+      <SafeToSpend month={month} />
 
       <Suspense fallback={null}>
         <SpentBar month={month} />
