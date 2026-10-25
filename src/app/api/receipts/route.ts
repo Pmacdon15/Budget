@@ -11,6 +11,7 @@
  */
 
 import { auth } from "@clerk/nextjs/server";
+import { claimReceiptScan } from "@/dal/receipt-scans";
 import { readReceiptSafely } from "@/lib/receipt-ai";
 import {
   IMAGE_CONTENT_TYPE,
@@ -48,6 +49,19 @@ export async function POST(request: Request) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   if (file.type !== IMAGE_CONTENT_TYPE || !isJpeg(bytes)) {
     return error("That file isn't a JPEG photo.", 415);
+  }
+
+  // Counted before anything costs money: a refused scan stores nothing and
+  // never reaches the AI.
+  const claim = await claimReceiptScan(userId);
+  if (!claim.allowed) {
+    return Response.json(
+      { error: claim.message, limited: true },
+      {
+        status: 429,
+        headers: { "Retry-After": String(claim.retryAfterSeconds) },
+      },
+    );
   }
 
   const pathname = newReceiptImagePathname(userId);
