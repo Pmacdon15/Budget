@@ -1,9 +1,11 @@
-import { Download, FileText } from "lucide-react";
+import { CalendarDays, Download, FileText } from "lucide-react";
+import Link from "next/link";
 import { Suspense } from "react";
 import { CategoryBars } from "@/components/charts/category-bars";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { PrintButton } from "@/components/print-button";
+import { TaxCard } from "@/components/report/tax-card";
 import { SplitCardsSkeleton, TextSkeleton } from "@/components/skeletons";
 import { buttonVariants } from "@/components/ui/button";
 import {
@@ -71,6 +73,22 @@ export default function ReportPage({
             </a>
           ))}
         </Suspense>
+        <Suspense
+          fallback={
+            <Link href="/report/year" className={csvClass}>
+              <CalendarDays /> Year view
+            </Link>
+          }
+        >
+          {month.then((m) => (
+            <Link
+              href={`/report/year?year=${m.slice(0, 4)}`}
+              className={csvClass}
+            >
+              <CalendarDays /> Year view
+            </Link>
+          ))}
+        </Suspense>
         <div className="print:hidden">
           <PrintButton />
         </div>
@@ -79,6 +97,8 @@ export default function ReportPage({
       <Suspense fallback={<SplitCardsSkeleton />}>
         <Report month={month} />
       </Suspense>
+
+      <TaxCard month={month} className="mt-4" />
     </>
   );
 }

@@ -2,6 +2,7 @@ import { Settings2, Target } from "lucide-react";
 import { Suspense } from "react";
 import { CategoryBudgetsDialog } from "@/components/budgets/category-budgets-dialog";
 import { EmptyState } from "@/components/empty-state";
+import { RolloverButton } from "@/components/rollover/rollover-button";
 import { ListSkeleton } from "@/components/skeletons";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,9 +16,11 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getBudgetProgress, getCategoryLimits } from "@/dal/category-budgets";
+import { getRolloverAmounts } from "@/dal/rollover";
 import { categoryColor, categoryLabel } from "@/lib/categories";
-import { type BudgetProgress, budgetStatus } from "@/lib/category-budgets";
+import { budgetStatus } from "@/lib/category-budgets";
 import { formatMoney } from "@/lib/money";
+import { applyRollover, type RolledProgress } from "@/lib/rollover";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -43,7 +46,10 @@ export function CategoryBudgetsCard({
         <CardDescription>
           Monthly limits, counting fixed bills and spending.
         </CardDescription>
-        <CardAction>
+        <CardAction className="flex gap-1">
+          <Suspense fallback={null}>
+            <RolloverButton month={month} />
+          </Suspense>
           <Suspense fallback={<Skeleton className="h-7 w-28" />}>
             <SetBudgetsButton month={month} />
           </Suspense>
@@ -76,7 +82,11 @@ async function SetBudgetsButton({ month: monthPromise }: Props) {
 
 async function BudgetList({ month: monthPromise, historyMonths }: Props) {
   const month = await monthPromise;
-  const progress = await getBudgetProgress(month, historyMonths);
+  const [budgets, rollover] = await Promise.all([
+    getBudgetProgress(month, historyMonths),
+    getRolloverAmounts(month),
+  ]);
+  const progress = applyRollover(budgets, rollover);
 
   if (progress.length === 0) {
     return (
@@ -97,11 +107,14 @@ async function BudgetList({ month: monthPromise, historyMonths }: Props) {
   );
 }
 
-function BudgetRow({ row }: { row: BudgetProgress }) {
-  const status = budgetStatus(row);
+function BudgetRow({ row }: { row: RolledProgress }) {
+  const status = budgetStatus({
+    spentCents: row.spentCents,
+    limitCents: row.availableCents,
+  });
   const percent =
-    row.limitCents > 0
-      ? Math.min((row.spentCents / row.limitCents) * 100, 100)
+    row.availableCents > 0
+      ? Math.min((row.spentCents / row.availableCents) * 100, 100)
       : row.spentCents > 0
         ? 100
         : 0;
@@ -118,11 +131,14 @@ function BudgetRow({ row }: { row: BudgetProgress }) {
         </span>
         <span className="shrink-0 text-muted-foreground tabular-nums">
           {formatMoney(row.spentCents)} / {formatMoney(row.limitCents)}
+          {row.carriedCents > 0
+            ? ` + ${formatMoney(row.carriedCents)} rolled over`
+            : null}
         </span>
       </div>
       <Progress
         value={percent}
-        aria-label={`${categoryLabel(row.category)}: ${formatMoney(row.spentCents)} of ${formatMoney(row.limitCents)}`}
+        aria-label={`${categoryLabel(row.category)}: ${formatMoney(row.spentCents)} of ${formatMoney(row.availableCents)}`}
         className={cn(
           status === "over" && "[&_[data-slot=progress-indicator]]:bg-rose-500",
           status === "near" &&
