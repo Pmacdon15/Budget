@@ -1,5 +1,6 @@
 import { Paperclip, Plus, Receipt } from "lucide-react";
 import { Suspense } from "react";
+import { CategoryBudgetsCard } from "@/components/budgets/category-budgets-card";
 import { CategoryBars } from "@/components/charts/category-bars";
 import { Delta } from "@/components/delta";
 import { EmptyState } from "@/components/empty-state";
@@ -85,6 +86,9 @@ export default function ExpensesPage({
       <Suspense fallback={<SplitCardsSkeleton />}>
         <Expenses month={month} />
       </Suspense>
+
+      {/* historyMonths matches the list above, so both share one overview read. */}
+      <CategoryBudgetsCard month={month} historyMonths={2} className="mt-4" />
     </>
   );
 }
