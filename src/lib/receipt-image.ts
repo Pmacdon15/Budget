@@ -31,6 +31,18 @@ export function newReceiptImagePathname(userId: string): string {
   return `${ROOT}/${userId}/${crypto.randomUUID()}.jpg`;
 }
 
+/** Any user's photo pathname, exactly as `newReceiptImagePathname` mints it. */
+export function isReceiptImagePathname(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const [root, userId, filename, ...rest] = value.split("/");
+  return (
+    root === ROOT &&
+    rest.length === 0 &&
+    SAFE_USER_ID.test(userId ?? "") &&
+    SAFE_FILENAME.test(filename ?? "")
+  );
+}
+
 export function isOwnReceiptImagePathname(
   value: unknown,
   userId: string,

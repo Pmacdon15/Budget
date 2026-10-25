@@ -43,6 +43,7 @@ Required environment variables (Vercel sets these when the Clerk and Neon integr
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk |
 | `CLERK_SECRET_KEY` | Clerk |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob (private store `budget-receipts`, holds receipt photos) |
+| `CRON_SECRET` | Any random string of 16+ characters. Vercel Cron sends it to `/api/cron/receipt-photos`, the daily job (`vercel.json`) that removes scanned photos never saved with an expense once they are a day old. Without it the job refuses every call. |
 
 Receipt reading uses Claude through **Vercel AI Gateway**. On Vercel it signs in with the project's OIDC token, so no key is needed. Optional overrides:
 
