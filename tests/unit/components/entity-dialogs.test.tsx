@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as expenseActions from "@/actions/expenses";
 import * as fixedActions from "@/actions/fixed-items";
 import * as incomeActions from "@/actions/income";
+import * as undoActions from "@/actions/undo";
 import { ExpenseActions } from "@/components/expense-actions";
 import { FixedItemActions } from "@/components/fixed-item-actions";
 import { ExpenseDialog } from "@/components/forms/expense-dialog";
@@ -29,6 +30,17 @@ vi.mock("@/actions/income", () => ({
   updateIncome: vi.fn(),
   deleteIncome: vi.fn(),
 }));
+vi.mock("@/actions/undo", () => ({
+  deleteExpenseWithUndo: vi.fn(),
+  stopFixedItemWithUndo: vi.fn(),
+  deleteIncomeWithUndo: vi.fn(),
+  undoDelete: vi.fn(),
+}));
+
+const UNDO_ID = "0b6f4a8e-5d2c-4f1a-9e3b-7c8d9e0f1a2b";
+const withUndo = expect.objectContaining({
+  action: expect.objectContaining({ label: "Undo" }),
+});
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -46,6 +58,14 @@ beforeEach(() => {
   ]) {
     vi.mocked(fn).mockResolvedValue({ ok: true });
   }
+  for (const fn of [
+    undoActions.deleteExpenseWithUndo,
+    undoActions.stopFixedItemWithUndo,
+    undoActions.deleteIncomeWithUndo,
+  ]) {
+    vi.mocked(fn).mockResolvedValue({ ok: true, undoId: UNDO_ID });
+  }
+  vi.mocked(undoActions.undoDelete).mockResolvedValue({ ok: true });
 });
 
 afterEach(() => {
@@ -287,9 +307,9 @@ describe("row actions", () => {
     ).toBeVisible();
     await user.click(within(confirm).getByRole("button", { name: "Delete" }));
     await waitFor(() =>
-      expect(expenseActions.deleteExpense).toHaveBeenCalledWith(item.id),
+      expect(undoActions.deleteExpenseWithUndo).toHaveBeenCalledWith(item.id),
     );
-    expect(toast.success).toHaveBeenCalledWith("Expense deleted");
+    expect(toast.success).toHaveBeenCalledWith("Expense deleted", withUndo);
   });
 
   it("opens the edit dialog for an expense", async () => {
@@ -311,8 +331,9 @@ describe("row actions", () => {
     });
     await user.click(within(confirm).getByRole("button", { name: "Delete" }));
     await waitFor(() =>
-      expect(incomeActions.deleteIncome).toHaveBeenCalledWith(entry.id),
+      expect(undoActions.deleteIncomeWithUndo).toHaveBeenCalledWith(entry.id),
     );
+    expect(toast.success).toHaveBeenCalledWith("Take-home deleted", withUndo);
   });
 
   it("stops an older bill from the viewed month", async () => {
@@ -333,12 +354,12 @@ describe("row actions", () => {
       within(confirm).getByRole("button", { name: "Stop bill" }),
     );
     await waitFor(() =>
-      expect(fixedActions.stopFixedItem).toHaveBeenCalledWith(
+      expect(undoActions.stopFixedItemWithUndo).toHaveBeenCalledWith(
         item.id,
         "2026-10",
       ),
     );
-    expect(toast.success).toHaveBeenCalledWith("Bill stopped");
+    expect(toast.success).toHaveBeenCalledWith("Bill stopped", withUndo);
   });
 
   it("deletes a bill that starts in the viewed month", async () => {
@@ -354,7 +375,62 @@ describe("row actions", () => {
     ).toBeVisible();
     await user.click(within(confirm).getByRole("button", { name: "Delete" }));
     await waitFor(() =>
-      expect(toast.success).toHaveBeenCalledWith("Bill deleted"),
+      expect(toast.success).toHaveBeenCalledWith("Bill deleted", withUndo),
     );
+  });
+
+  async function deleteCostco() {
+    renderWithQuery(<ExpenseActions expense={expense()} />);
+    const { user, menu } = await openMenu("Costco run");
+    await user.click(within(menu).getByRole("menuitem", { name: /Delete/ }));
+    const confirm = await screen.findByRole("alertdialog");
+    await user.click(within(confirm).getByRole("button", { name: "Delete" }));
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith("Expense deleted", withUndo),
+    );
+    const [, options] =
+      vi
+        .mocked(toast.success)
+        .mock.calls.find(([message]) => message === "Expense deleted") ?? [];
+    return (options as unknown as { action: { onClick: () => void } }).action;
+  }
+
+  it("restores a deleted expense from the toast's Undo", async () => {
+    const undo = await deleteCostco();
+    undo.onClick();
+    await waitFor(() =>
+      expect(undoActions.undoDelete).toHaveBeenCalledWith(UNDO_ID),
+    );
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Restored"));
+  });
+
+  it("says when Undo is too late", async () => {
+    vi.mocked(undoActions.undoDelete).mockResolvedValue({
+      ok: false,
+      error: "That can't be undone any more.",
+    });
+    const undo = await deleteCostco();
+    undo.onClick();
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        "That can't be undone any more.",
+      ),
+    );
+  });
+
+  it("shows the error and no Undo when the delete fails", async () => {
+    vi.mocked(undoActions.deleteExpenseWithUndo).mockResolvedValue({
+      ok: false,
+      error: "That item no longer exists.",
+    });
+    renderWithQuery(<ExpenseActions expense={expense()} />);
+    const { user, menu } = await openMenu("Costco run");
+    await user.click(within(menu).getByRole("menuitem", { name: /Delete/ }));
+    const confirm = await screen.findByRole("alertdialog");
+    await user.click(within(confirm).getByRole("button", { name: "Delete" }));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("That item no longer exists."),
+    );
+    expect(toast.success).not.toHaveBeenCalled();
   });
 });
