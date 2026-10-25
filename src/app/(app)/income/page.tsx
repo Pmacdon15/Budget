@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/empty-state";
 import { IncomeDialog } from "@/components/forms/income-dialog";
 import { IncomeActions } from "@/components/income-actions";
 import { PageHeader } from "@/components/page-header";
+import { RecurringIncomeCard } from "@/components/recurring-income/recurring-income-card";
 import {
   ActionsSkeleton,
   ChartSkeleton,
@@ -85,6 +86,8 @@ export default function IncomePage({
           <Extreme month={month} pick="lowest" />
         </Suspense>
       </div>
+
+      <RecurringIncomeCard month={month} className="mt-6" />
 
       <div className="mt-6 grid gap-4 lg:grid-cols-5">
         <Card className="lg:col-span-3">
