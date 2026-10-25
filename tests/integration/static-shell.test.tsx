@@ -81,6 +81,8 @@ describe("static shell", () => {
       "Left over",
       "Last 12 months",
       "Where it went",
+      "Due soon",
+      "Bills due in the next 7 days.",
       "Recent spending",
     ]) {
       expect(text).toContain(heading);

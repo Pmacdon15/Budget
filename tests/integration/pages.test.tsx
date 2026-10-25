@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ExpensesPage from "@/app/(app)/expenses/page";
 import FixedPage from "@/app/(app)/fixed/page";
 import IncomePage from "@/app/(app)/income/page";
@@ -85,6 +85,42 @@ describe("Overview page", () => {
     await seedMonth("user_b");
     signInAs("user_a");
     expect(await render(OverviewPage)).toContain("Welcome to Budget");
+  });
+
+  describe("due soon", () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-28T18:00:00Z"));
+    });
+    afterEach(() => vi.useRealTimers());
+
+    it("lists bills due in the next 7 days from today", async () => {
+      await seedMonth(); // Rent, due on the 1st
+      await insertFixedItem("user_a", {
+        name: "Phone",
+        category: "Utilities",
+        amountCents: 6_500,
+        dueDay: 20,
+        startMonth: "2026-01",
+      });
+      const text = await render(OverviewPage);
+      expect(text).toContain("Due soon");
+      expect(text).toContain("Sun, Nov 1");
+      expect(text).toContain("In 4 days");
+      expect(text).toContain("Total due");
+      expect(text).not.toContain("Nothing due this week");
+    });
+
+    it("says when nothing is due", async () => {
+      await insertFixedItem("user_a", {
+        name: "Phone",
+        category: "Utilities",
+        amountCents: 6_500,
+        dueDay: 20,
+        startMonth: "2026-01",
+      });
+      expect(await render(OverviewPage)).toContain("Nothing due this week");
+    });
   });
 });
 

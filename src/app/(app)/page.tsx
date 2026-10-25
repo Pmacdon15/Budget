@@ -38,6 +38,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { UpcomingBillsCard } from "@/components/upcoming-bills-card";
 import { getLatestIncome } from "@/dal/income";
 import { getMonthOverview } from "@/dal/overview";
 import { categoryColor, categoryLabel } from "@/lib/categories";
@@ -140,6 +141,8 @@ export default function OverviewPage({
       </div>
 
       <CategoryBudgetsCard month={month} className="mt-4" />
+
+      <UpcomingBillsCard month={month} className="mt-4" />
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <Card>
