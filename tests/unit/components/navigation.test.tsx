@@ -40,6 +40,7 @@ describe("NavLinks", () => {
       "Fixed bills",
       "Take-home",
       "Spending",
+      "Receipts",
       "Report",
     ]) {
       expect(screen.getByRole("link", { name })).toBeInTheDocument();

@@ -1,10 +1,11 @@
 import { get } from "@vercel/blob";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GET as getImage } from "@/app/api/receipts/[id]/image/route";
 import { POST as scan } from "@/app/api/receipts/route";
 import { insertExpenseWithReceipt, selectExpensesBetween } from "@/db/expenses";
 import { putReceiptImage } from "@/lib/receipt-store";
 import { signInAs, signOut } from "./../helpers/auth";
+import { rows } from "./../helpers/test-db";
 
 vi.mock("@/lib/receipt-store", () => ({
   putReceiptImage: vi.fn(),
@@ -126,6 +127,82 @@ describe("POST /api/receipts", () => {
   it("requires sign-in", async () => {
     signOut();
     expect((await upload(JPEG)).status).toBe(401);
+  });
+});
+
+describe("POST /api/receipts rate limit", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-25T09:15:00Z"));
+    vi.stubEnv("RECEIPT_SCANS_PER_HOUR", "2");
+    vi.stubEnv("RECEIPT_SCANS_PER_DAY", "3");
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-test");
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function useUpHour() {
+    expect((await upload(JPEG)).status).toBe(200);
+    expect((await upload(JPEG)).status).toBe(200);
+  }
+
+  it("refuses with 429, a friendly message and Retry-After", async () => {
+    claudeReplies({ merchant: "Costco" });
+    await useUpHour();
+
+    const response = await upload(JPEG);
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Retry-After")).toBe(String(45 * 60));
+    expect(await response.json()).toEqual({
+      error: expect.stringMatching(/this hour.*by hand/),
+      limited: true,
+    });
+  });
+
+  it("stores nothing and never calls the reader when refused", async () => {
+    const fetch = claudeReplies({ merchant: "Costco" });
+    await useUpHour();
+    vi.mocked(putReceiptImage).mockClear();
+    fetch.mockClear();
+
+    expect((await upload(JPEG)).status).toBe(429);
+    expect(putReceiptImage).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("is per user: another user can still scan", async () => {
+    claudeReplies({ merchant: "Costco" });
+    await useUpHour();
+    expect((await upload(JPEG)).status).toBe(429);
+
+    signInAs("user_b");
+    expect((await upload(JPEG)).status).toBe(200);
+  });
+
+  it("resets after the window, and the daily cap holds across hours", async () => {
+    claudeReplies({ merchant: "Costco" });
+    await useUpHour();
+    expect((await upload(JPEG)).status).toBe(429);
+
+    vi.setSystemTime(new Date("2026-10-25T10:00:05Z"));
+    expect((await upload(JPEG)).status).toBe(200);
+
+    const capped = await upload(JPEG);
+    expect(capped.status).toBe(429);
+    expect((await capped.json()).error).toMatch(/today/);
+    expect(capped.headers.get("Retry-After")).toBe(String(14 * 3600 - 5));
+
+    vi.setSystemTime(new Date("2026-10-26T00:00:00Z"));
+    expect((await upload(JPEG)).status).toBe(200);
+  });
+
+  it("doesn't count uploads it rejects before scanning", async () => {
+    await upload(new Uint8Array([1, 2, 3, 4]));
+    await upload(null);
+    signOut();
+    await upload(JPEG);
+    expect(await rows("select * from receipt_scan_counts")).toEqual([]);
   });
 });
 
