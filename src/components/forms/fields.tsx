@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -15,6 +17,7 @@ import {
   categoryLabel,
   isCategory,
 } from "@/lib/categories";
+import { cn } from "@/lib/utils";
 
 export function Field({
   label,
@@ -75,6 +78,67 @@ export function MoneyInput({
         }
         className="pl-7 tabular-nums"
       />
+    </div>
+  );
+}
+
+/**
+ * A money input that also takes amounts below zero, like an overdrawn bank
+ * balance. Phone number pads often have no minus key, so a "±" button flips
+ * the sign; typing a leading "-" works too.
+ */
+export function SignedMoneyInput({
+  id,
+  name,
+  defaultValue = "",
+  autoFocus,
+}: {
+  id: string;
+  name: string;
+  defaultValue?: string;
+  autoFocus?: boolean;
+}) {
+  const [value, setValue] = useState(defaultValue);
+  const negative = /^\s*[-−–]/.test(value);
+  const flip = () =>
+    setValue((current) =>
+      negative ? current.replace(/^\s*[-−–]\s*/, "") : `-${current.trim()}`,
+    );
+
+  return (
+    <div className="flex gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        className="w-10 shrink-0 tabular-nums"
+        aria-pressed={negative}
+        aria-label={
+          negative ? "Make it positive" : "Make it negative (overdrawn)"
+        }
+        onClick={flip}
+      >
+        ±
+      </Button>
+      <div className="relative flex-1">
+        <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-base text-muted-foreground md:text-sm">
+          $
+        </span>
+        <Input
+          id={id}
+          name={name}
+          inputMode="decimal"
+          autoComplete="off"
+          placeholder="0.00"
+          required
+          value={value}
+          autoFocus={autoFocus}
+          onChange={(e) => setValue(e.target.value)}
+          className={cn(
+            "pl-7 tabular-nums",
+            negative && "text-rose-600 dark:text-rose-400",
+          )}
+        />
+      </div>
     </div>
   );
 }
