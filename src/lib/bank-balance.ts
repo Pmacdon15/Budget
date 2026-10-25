@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { parseSignedMoney } from "@/lib/money";
+import { formatMoney, parseSignedMoney } from "@/lib/money";
 import { TIME_ZONE } from "@/lib/month";
 
 /*
@@ -33,13 +33,21 @@ export type BankBalanceFormValues = z.input<typeof bankBalanceSchema>;
 export type BankBalanceInput = z.output<typeof bankBalanceSchema>;
 
 export type BankBalance = {
-  /** Below zero when the account is overdrawn. */
+  /**
+   * What's in the account now: the entered balance less the expenses added
+   * since. Below zero when the account is overdrawn.
+   */
   balanceCents: number;
+  /** The balance as the user (or their AI) last entered it. */
+  enteredCents: number;
+  /** Expenses added after it was entered, which have come off it. */
+  spentSinceCents: number;
   /** When it was last entered, as an ISO timestamp. */
   updatedAt: string;
 };
 
-export const isOverdrawn = (balance: BankBalance) => balance.balanceCents < 0;
+export const isOverdrawn = (balance: Pick<BankBalance, "balanceCents">) =>
+  balance.balanceCents < 0;
 
 /** "Updated Oct 25, 2:52 p.m." in the app's time zone. */
 export function balanceUpdatedLabel(updatedAt: string) {
@@ -51,4 +59,15 @@ export function balanceUpdatedLabel(updatedAt: string) {
     timeZone: TIME_ZONE,
   }).format(new Date(updatedAt));
   return `Updated ${when}`;
+}
+
+/**
+ * "Entered $1,250.00, less $80.00 spent since", or null when nothing has been
+ * spent since it was entered (the balance is just what was typed).
+ */
+export function balanceDebitLabel(balance: BankBalance) {
+  if (balance.spentSinceCents === 0) return null;
+  return `Entered ${formatMoney(balance.enteredCents)}, less ${formatMoney(
+    balance.spentSinceCents,
+  )} spent since`;
 }

@@ -82,6 +82,8 @@ describe("BankBalanceDialog", () => {
   it("starts from the saved balance, keeping its minus", async () => {
     const { input } = await open({
       balanceCents: -12_345,
+      enteredCents: -12_345,
+      spentSinceCents: 0,
       updatedAt: "2026-10-25T20:52:00.000Z",
     });
     expect(input).toHaveValue("-123.45");
