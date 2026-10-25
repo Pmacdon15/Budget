@@ -14,6 +14,9 @@ export const metadata: Metadata = {
   title: { default: "Budget", template: "%s · Budget" },
   description:
     "Monthly budget: fixed bills, take-home pay, spending and reports.",
+  applicationName: "Budget",
+  // Installed to an iPhone home screen: open full screen, titled "Budget".
+  appleWebApp: { capable: true, title: "Budget", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {
