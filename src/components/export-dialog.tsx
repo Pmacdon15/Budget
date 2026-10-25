@@ -3,6 +3,7 @@
 import { Download, FileSpreadsheet, FileText, Sheet } from "lucide-react";
 import { useState } from "react";
 import { Field } from "@/components/forms/fields";
+import { DownloadPhotosButton } from "@/components/receipt-photos/download-photos-button";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
@@ -180,6 +181,8 @@ export function ExportDialog({ month }: { month: string }) {
               </label>
             ) : null}
           </fieldset>
+
+          <DownloadPhotosButton from={from} to={to} categories={categories} />
 
           {"error" in result ? (
             <p role="alert" className="text-destructive text-sm">
