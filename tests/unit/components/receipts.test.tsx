@@ -8,6 +8,7 @@ import {
   ExpenseDialog,
   type ScannedReceipt,
 } from "@/components/forms/expense-dialog";
+import { ScanLimitError } from "@/components/receipt-picker";
 import {
   ScanReceiptButton,
   scanReceipt,
@@ -149,6 +150,46 @@ describe("scanReceipt", () => {
     await expect(scanReceipt(new Blob(["x"]))).rejects.toThrow(
       "Couldn't scan that receipt. Try again.",
     );
+  });
+});
+
+describe("scan limit", () => {
+  const limitReply = () =>
+    vi.fn(async () =>
+      Response.json(
+        { error: "You've scanned a lot of receipts this hour.", limited: true },
+        { status: 429, headers: { "Retry-After": "120" } },
+      ),
+    );
+
+  it("scanReceipt throws a ScanLimitError with the server's message", async () => {
+    vi.stubGlobal("fetch", limitReply());
+    const error = await scanReceipt(new Blob(["x"])).catch((e) => e);
+    expect(error).toBeInstanceOf(ScanLimitError);
+    expect(error.message).toBe("You've scanned a lot of receipts this hour.");
+    expect(error.retryAfterSeconds).toBe(120);
+  });
+
+  it("shows the message on the scan button and disables it", async () => {
+    const user = userEvent.setup();
+    vi.mocked(compressImage).mockResolvedValue(new Blob(["jpeg"]));
+    vi.stubGlobal("fetch", limitReply());
+    renderWithQuery(<ScanReceiptButton month="2026-10" />);
+
+    await user.upload(
+      screen.getByLabelText("Choose a photo of the receipt"),
+      new File(["x"], "r.jpg", { type: "image/jpeg" }),
+    );
+
+    const button = await screen.findByRole("button", {
+      name: /scan limit reached/i,
+    });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute(
+      "title",
+      "You've scanned a lot of receipts this hour.",
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("this hour");
   });
 });
 

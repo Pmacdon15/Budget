@@ -4,7 +4,9 @@ import {
   CalendarRange,
   FileText,
   LayoutDashboard,
+  PiggyBank,
   Receipt,
+  ReceiptText,
   Wallet,
 } from "lucide-react";
 import Link from "next/link";
@@ -16,6 +18,8 @@ const LINKS = [
   { href: "/fixed", label: "Fixed bills", icon: CalendarRange },
   { href: "/income", label: "Take-home", icon: Wallet },
   { href: "/expenses", label: "Spending", icon: Receipt },
+  { href: "/receipts", label: "Receipts", icon: ReceiptText },
+  { href: "/goals", label: "Goals", icon: PiggyBank },
   { href: "/report", label: "Report", icon: FileText },
 ] as const;
 

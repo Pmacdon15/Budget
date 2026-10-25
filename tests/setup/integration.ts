@@ -20,6 +20,9 @@ vi.mock("next/navigation", async () => {
     redirect: vi.fn((url: string) => {
       throw new RedirectError(url);
     }),
+    // For client components rendered inside pages (the Spending search form).
+    useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
+    usePathname: () => "/",
   };
 });
 
