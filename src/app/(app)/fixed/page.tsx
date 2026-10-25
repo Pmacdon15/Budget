@@ -1,5 +1,7 @@
 import { CalendarRange, Plus } from "lucide-react";
 import { Suspense } from "react";
+import { BillPaidToggle } from "@/components/bills/bill-paid-toggle";
+import { BillsPaidSummary } from "@/components/bills/bills-paid-summary";
 import { CategoryBars } from "@/components/charts/category-bars";
 import { EmptyState } from "@/components/empty-state";
 import { FixedItemActions } from "@/components/fixed-item-actions";
@@ -28,7 +30,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { getPaidBillIds } from "@/dal/bill-payments";
 import { getFixedItems } from "@/dal/fixed-items";
+import { summarizeBillsPaid } from "@/lib/bill-payments";
 import { isActive } from "@/lib/budget";
 import { categoryColor, categoryLabel } from "@/lib/categories";
 import { formatMoney } from "@/lib/money";
@@ -86,11 +90,15 @@ export default function FixedPage({
 
 async function FixedBills({ month: monthPromise }: { month: Promise<string> }) {
   const month = await monthPromise;
-  const all = await getFixedItems();
+  const [all, paidIds] = await Promise.all([
+    getFixedItems(),
+    getPaidBillIds(month),
+  ]);
   const active = all
     .filter((item) => isActive(item, month))
     .sort((a, b) => b.amountCents - a.amountCents);
   const total = active.reduce((sum, item) => sum + item.amountCents, 0);
+  const paid = summarizeBillsPaid(active, paidIds);
 
   const byCategory = new Map<string, CategoryTotal>();
   for (const item of active) {
@@ -129,6 +137,8 @@ async function FixedBills({ month: monthPromise }: { month: Promise<string> }) {
               <CardDescription>
                 {active.length} active {active.length === 1 ? "bill" : "bills"}.
                 Editing an amount applies from this month forward.
+                <br />
+                <BillsPaidSummary summary={paid} />
               </CardDescription>
             </CardHeader>
             <CardContent className="px-0 sm:px-4">
@@ -141,6 +151,7 @@ async function FixedBills({ month: monthPromise }: { month: Promise<string> }) {
                     </TableHead>
                     <TableHead className="hidden sm:table-cell">Due</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
+                    <TableHead className="text-right">Paid</TableHead>
                     <TableHead className="w-10" />
                   </TableRow>
                 </TableHeader>
@@ -175,6 +186,14 @@ async function FixedBills({ month: monthPromise }: { month: Promise<string> }) {
                       <TableCell className="text-right font-medium tabular-nums">
                         {formatMoney(item.amountCents)}
                       </TableCell>
+                      <TableCell className="text-right">
+                        <BillPaidToggle
+                          fixedItemId={item.id}
+                          name={item.name}
+                          month={month}
+                          paid={paidIds.has(item.id)}
+                        />
+                      </TableCell>
                       <TableCell>
                         <FixedItemActions item={item} month={month} />
                       </TableCell>
@@ -189,6 +208,7 @@ async function FixedBills({ month: monthPromise }: { month: Promise<string> }) {
                     <TableCell className="text-right font-semibold tabular-nums">
                       {formatMoney(total)}
                     </TableCell>
+                    <TableCell />
                     <TableCell />
                   </TableRow>
                 </TableFooter>

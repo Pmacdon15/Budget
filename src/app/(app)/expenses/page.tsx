@@ -5,6 +5,11 @@ import { CategoryBars } from "@/components/charts/category-bars";
 import { Delta } from "@/components/delta";
 import { EmptyState } from "@/components/empty-state";
 import { ExpenseActions } from "@/components/expense-actions";
+import { ExpenseSearchForm } from "@/components/expense-search/expense-search-form";
+import {
+  ExpenseSearchSummary,
+  NoMatchesRow,
+} from "@/components/expense-search/search-results";
 import { ExportDialog } from "@/components/export-dialog";
 import { ExpenseDialog } from "@/components/forms/expense-dialog";
 import { PageHeader } from "@/components/page-header";
@@ -31,10 +36,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { SEARCH_RESULT_LIMIT, searchExpenses } from "@/dal/expense-search";
 import { getMonthOverview } from "@/dal/overview";
 import { categoryColor, categoryLabel } from "@/lib/categories";
 import { formatMoney } from "@/lib/money";
 import { monthLabel } from "@/lib/month";
+import {
+  type ExpenseSearch,
+  expenseSearchFrom,
+  isSearching,
+} from "@/lib/schemas/expense-search";
 import { monthFrom, type SearchParams } from "@/lib/search-params";
 import type { CategoryTotal } from "@/lib/types";
 
@@ -50,6 +61,7 @@ export default function ExpensesPage({
   searchParams: SearchParams;
 }) {
   const month = monthFrom(searchParams);
+  const search = expenseSearchFrom(searchParams);
 
   return (
     <>
@@ -83,8 +95,14 @@ export default function ExpensesPage({
         </Suspense>
       </PageHeader>
 
+      <Suspense fallback={<ExpenseSearchForm disabled className="mb-4" />}>
+        {search.then((s) => (
+          <ExpenseSearchForm search={s} className="mb-4" />
+        ))}
+      </Suspense>
+
       <Suspense fallback={<SplitCardsSkeleton />}>
-        <Expenses month={month} />
+        <Expenses month={month} search={search} />
       </Suspense>
 
       {/* historyMonths matches the list above, so both share one overview read. */}
@@ -93,9 +111,20 @@ export default function ExpensesPage({
   );
 }
 
-async function Expenses({ month: monthPromise }: { month: Promise<string> }) {
-  const month = await monthPromise;
-  const { expenses, current, previous } = await getMonthOverview(month, 2);
+async function Expenses({
+  month: monthPromise,
+  search: searchPromise,
+}: {
+  month: Promise<string>;
+  search: Promise<ExpenseSearch>;
+}) {
+  const [month, search] = await Promise.all([monthPromise, searchPromise]);
+  const searching = isSearching(search);
+  const [{ expenses, current, previous }, matches] = await Promise.all([
+    getMonthOverview(month, 2),
+    searching ? searchExpenses(month, search) : null,
+  ]);
+  const shown = matches ?? expenses;
 
   const byCategory = new Map<string, CategoryTotal>();
   for (const e of expenses) {
@@ -115,7 +144,7 @@ async function Expenses({ month: monthPromise }: { month: Promise<string> }) {
 
   return (
     <>
-      {expenses.length === 0 ? (
+      {expenses.length === 0 && !searching ? (
         <EmptyState
           icon={Receipt}
           title={`No spending logged for ${monthLabel(month)}`}
@@ -133,13 +162,24 @@ async function Expenses({ month: monthPromise }: { month: Promise<string> }) {
             <CardHeader>
               <CardTitle>{formatMoney(current.variableCents)} spent</CardTitle>
               <CardDescription>
-                {expenses.length}{" "}
-                {expenses.length === 1 ? "expense" : "expenses"} ·{" "}
-                <Delta
-                  current={current.variableCents}
-                  previous={previous.variableCents}
-                  goodWhen="down"
-                />
+                {matches ? (
+                  <ExpenseSearchSummary
+                    matches={matches}
+                    month={month}
+                    search={search}
+                    limit={SEARCH_RESULT_LIMIT}
+                  />
+                ) : (
+                  <>
+                    {expenses.length}{" "}
+                    {expenses.length === 1 ? "expense" : "expenses"} ·{" "}
+                    <Delta
+                      current={current.variableCents}
+                      previous={previous.variableCents}
+                      goodWhen="down"
+                    />
+                  </>
+                )}
               </CardDescription>
             </CardHeader>
             <CardContent className="px-0 sm:px-4">
@@ -155,7 +195,8 @@ async function Expenses({ month: monthPromise }: { month: Promise<string> }) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {expenses.map((expense) => (
+                  {shown.length === 0 ? <NoMatchesRow colSpan={4} /> : null}
+                  {shown.map((expense) => (
                     <TableRow key={expense.id}>
                       <TableCell>
                         <div className="flex items-center gap-2">
