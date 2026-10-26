@@ -51,6 +51,7 @@ export async function selectSpendingByCategory(
     select month, category, sum(amount_cents)::bigint as total
     from expenses
     where user_id = ${userId} and month between ${from} and ${to}
+      and fixed_item_id is null
     group by month, category
   `;
   return rows.map((r) => ({

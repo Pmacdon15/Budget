@@ -235,6 +235,7 @@ describe("list_expenses", () => {
         amount: 123.45,
         unpaid: false,
         has_receipt: false,
+        fixed_bill_id: null,
       },
     ]);
     expect(result.data.pending_review).toEqual([

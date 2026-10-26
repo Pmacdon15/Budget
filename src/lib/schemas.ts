@@ -55,6 +55,26 @@ export const fixedItemSchema = z.object({
         .nullable(),
     ),
   month: monthSchema,
+  /** A checkbox: "on" when the amount is a guess. Left out keeps what the bill had. */
+  isEstimate: z
+    .string()
+    .optional()
+    .transform((v) =>
+      v === undefined ? undefined : v === "on" || v === "true",
+    ),
+  /** Comma-separated names the charge shows up under, e.g. "Google Play, Google One". */
+  matchKeywords: z
+    .string()
+    .max(600, "Keep the names shorter")
+    .optional()
+    .transform((v) =>
+      v === undefined
+        ? undefined
+        : v
+            .split(",")
+            .map((k) => k.trim())
+            .filter(Boolean),
+    ),
 });
 
 export const incomeSchema = z.object({

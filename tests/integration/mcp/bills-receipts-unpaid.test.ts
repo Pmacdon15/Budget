@@ -294,10 +294,25 @@ describe("fixed bills", () => {
         name: "Internet",
         category: "Utilities",
         amount: 85,
+        is_estimate: false,
+        frequency: "monthly",
         due_day: 12,
+        merchant: null,
+        match_keywords: [],
         start_month: "2026-01",
         end_month: null,
         paid_this_month: true,
+        // Marked paid without a date, so there's no charge to show yet.
+        last_charged_on: null,
+        last_charged_amount: null,
+        amount_history: [
+          {
+            from_month: "2026-01",
+            to_month: null,
+            amount: 85,
+            is_estimate: false,
+          },
+        ],
       },
     ]);
     expect((await listFixedBills(A, { month: "2025-12" })).data.bills).toEqual(

@@ -51,6 +51,9 @@ export const toExpense = (r: Row): Expense => ({
     ? {}
     : { receiptHasPhoto: Boolean(r.receipt_has_photo) }),
   ...(r.unpaid === undefined ? {} : { unpaid: Boolean(r.unpaid) }),
+  ...(r.fixed_item_id === undefined
+    ? {}
+    : { fixedItemId: r.fixed_item_id ?? null }),
 });
 
 export async function selectExpensesBetween(
@@ -65,6 +68,8 @@ export async function selectExpensesBetween(
             where r.id = expenses.receipt_id) as receipt_has_photo
     from expenses
     where user_id = ${userId} and month between ${from} and ${to}
+      -- Paid a fixed bill: the bill already counts for its month.
+      and fixed_item_id is null
     order by spent_on desc, created_at desc
   `;
   return rows.map(toExpense);
@@ -94,6 +99,7 @@ export async function selectExpensesForExport(
     where e.user_id = ${userId}
       and e.month between ${from} and ${to}
       and e.category = any(${categories})
+      and e.fixed_item_id is null
     order by e.spent_on asc, e.created_at asc
   `;
   return rows.map((r) => ({
@@ -111,7 +117,8 @@ export async function selectExpenseById(
   id: string,
 ): Promise<Expense | null> {
   const rows = await db()`
-    select id, month, spent_on, description, category, amount_cents, receipt_id
+    select id, month, spent_on, description, category, amount_cents, receipt_id,
+           unpaid, paid_on, fixed_item_id
     from expenses
     where id = ${id} and user_id = ${userId}
   `;
@@ -258,7 +265,7 @@ export async function selectExpensesWithStatus(
 ): Promise<ExpenseWithStatus[]> {
   const rows = await db()`
     select id, month, spent_on, description, category, amount_cents, receipt_id,
-           unpaid
+           unpaid, fixed_item_id
     from expenses
     where user_id = ${userId} and spent_on between ${from} and ${to}
     order by spent_on desc, created_at desc

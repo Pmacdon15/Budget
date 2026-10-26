@@ -22,6 +22,9 @@ function toIso(value: unknown) {
  * never comes off twice, even when it is added (or approved from Review)
  * after the balance was entered or synced from a bank alert.
  *
+ * A fixed bill marked paid with the day it was paid comes off by the same rule,
+ * unless an expense paid it: then the expense is the one debit.
+ *
  * The debit is worked out on read instead of being written into the row, so
  * editing, deleting or undoing an expense can never leave it wrong, and
  * entering a new balance starts fresh.
@@ -40,6 +43,18 @@ export async function selectBankBalance(
                and coalesce(e.paid_at, e.created_at) > b.updated_at
                and coalesce(e.paid_on, e.spent_on)
                    >= (b.updated_at at time zone ${TIME_ZONE}::text)::date
+           ), 0)
+           -- Fixed bills marked paid the same way. A bill paid by a linked
+           -- expense comes off through that expense, so it isn't counted here.
+           -- Marks with no day are bookkeeping only (from before bills had one).
+           + coalesce((
+             select sum(p.amount_cents) from fixed_item_payments p
+             where p.user_id = b.user_id
+               and p.expense_id is null
+               and p.paid_on is not null
+               and p.amount_cents is not null
+               and p.created_at > b.updated_at
+               and p.paid_on >= (b.updated_at at time zone ${TIME_ZONE}::text)::date
            ), 0) as spent_since_cents
     from bank_balances b
     where b.user_id = ${userId}

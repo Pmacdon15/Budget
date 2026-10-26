@@ -9,15 +9,18 @@ vi.mock("@/mcp/tools", () => ({
   addExpense: vi.fn(),
   addFixedBill: vi.fn(),
   attachReceipt: vi.fn(),
+  convertExpenseToFixedBill: vi.fn(),
   deleteExpense: vi.fn(),
   editExpense: vi.fn(),
   editFixedBill: vi.fn(),
+  findMatchingFixedBill: vi.fn(),
   listCategories: vi.fn(),
   listExpenses: vi.fn(),
   listFixedBills: vi.fn(),
   markBillPaid: vi.fn(),
   markExpensePaid: vi.fn(),
   syncBankBalance: vi.fn(),
+  unlinkFixedBill: vi.fn(),
 }));
 
 type Registered = {
@@ -49,15 +52,18 @@ describe("Budget MCP server", () => {
       "add_expense",
       "add_fixed_bill",
       "attach_receipt",
+      "convert_expense_to_fixed_bill",
       "delete_expense",
       "edit_expense",
       "edit_fixed_bill",
+      "find_matching_fixed_bill",
       "list_categories",
       "list_expenses",
       "list_fixed_bills",
       "mark_bill_paid",
       "mark_expense_paid",
       "sync_bank_balance",
+      "unlink_fixed_bill",
     ]);
   });
 
@@ -146,7 +152,7 @@ describe("server instructions", () => {
     ],
     [
       "not add an expense for an existing fixed bill",
-      /already counted: don't add_expense/,
+      /already counted: don't add it as a separate expense/,
     ],
     ["change a bill's price from that month on", /from_month/],
     ["send a PDF receipt's text", /for a PDF receipt, send its text/],

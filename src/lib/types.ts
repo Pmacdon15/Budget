@@ -8,6 +8,14 @@ export type FixedItem = {
   dueDay: number | null;
   startMonth: string;
   endMonth: string | null;
+  /** Who charges it, as it shows up on a receipt or statement. */
+  merchant?: string | null;
+  /** Other names a charge for this bill shows up under. */
+  matchKeywords?: string[];
+  /** The user guessed the amount; the first real charge replaces it. */
+  isEstimate?: boolean;
+  /** Ties the rows one bill is split into when its amount changes. */
+  seriesId?: string;
 };
 
 export type IncomeEntry = {
@@ -31,6 +39,8 @@ export type Expense = {
   receiptHasPhoto?: boolean;
   /** Not paid yet, so it stays off the bank balance until it's marked paid. */
   unpaid?: boolean;
+  /** The fixed bill this expense paid. It counts as that bill, not as extra spending. */
+  fixedItemId?: string | null;
 };
 
 /** One expense line in a download, with what was read off its receipt. */
