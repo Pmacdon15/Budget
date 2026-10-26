@@ -18,6 +18,10 @@ export type PendingValues = {
   client: string | null;
   unpaid?: boolean;
   receipt?: ReceiptDetails | null;
+  /** The fixed bill this item pays: approving links it and marks that month paid. */
+  fixedItemId?: string | null;
+  /** Whether it's a subscription, when the AI or the user said. Null: unknown. */
+  isSubscription?: boolean | null;
 };
 
 /** A receipt as stored in `pending_expenses.receipt`: the receipts table's column names. */
@@ -55,6 +59,14 @@ const toPending = (r: Row): PendingExpense => ({
   possibleDuplicate: Boolean(r.possible_duplicate),
   unpaid: Boolean(r.unpaid),
   hasReceipt: r.receipt != null,
+  fixedItemId: r.fixed_item_id ?? null,
+  fixedItemName: r.fixed_item_name ?? null,
+  fixedItemAmountCents:
+    r.fixed_item_amount_cents == null
+      ? null
+      : Number(r.fixed_item_amount_cents),
+  fixedItemIsEstimate: Boolean(r.fixed_item_is_estimate),
+  isSubscription: r.is_subscription == null ? null : Boolean(r.is_subscription),
 });
 
 /** Saves an item for review and returns its id. */
@@ -65,11 +77,12 @@ export async function insertPendingExpense(
   const [row] = await db()`
     insert into pending_expenses (user_id, spent_on, description, merchant,
                                   category, amount_cents, source, client,
-                                  unpaid, receipt)
+                                  unpaid, receipt, fixed_item_id, is_subscription)
     values (${userId}, ${values.spentOn}, ${values.description}, ${values.merchant},
             ${values.category}, ${values.amountCents}, ${values.source}, ${values.client},
             ${values.unpaid ?? false},
-            ${values.receipt ? receiptJson(values.receipt) : null}::jsonb)
+            ${values.receipt ? receiptJson(values.receipt) : null}::jsonb,
+            ${values.fixedItemId ?? null}, ${values.isSubscription ?? null}::boolean)
     returning id
   `;
   return String(row?.id);
@@ -82,7 +95,10 @@ export async function selectPendingExpenses(
   const rows = await db()`
     select p.id, p.spent_on, p.description, p.merchant, p.category,
            p.amount_cents, p.source, p.client, p.created_at, p.unpaid,
-           p.receipt,
+           p.receipt, p.is_subscription,
+           bill.id as fixed_item_id, bill.name as fixed_item_name,
+           bill.amount_cents as fixed_item_amount_cents,
+           bill.is_estimate as fixed_item_is_estimate,
            exists (
              select 1 from expenses e
              where e.user_id = p.user_id and e.spent_on = p.spent_on
@@ -90,6 +106,20 @@ export async function selectPendingExpenses(
              having sum(e.amount_cents) = p.amount_cents
            ) as possible_duplicate
     from pending_expenses p
+    -- The linked bill's row for the item's month (a bill whose amount changed
+    -- is several rows), so the amount shown is the one that month uses.
+    left join lateral (
+      select f.id, f.name, f.amount_cents, f.is_estimate
+      from fixed_items picked
+      join fixed_items f
+        on f.user_id = picked.user_id
+       and coalesce(f.series_id, f.id) = coalesce(picked.series_id, picked.id)
+       and f.start_month <= to_char(p.spent_on, 'YYYY-MM')
+       and (f.end_month is null or f.end_month >= to_char(p.spent_on, 'YYYY-MM'))
+      where picked.id = p.fixed_item_id and picked.user_id = p.user_id
+      order by f.start_month desc
+      limit 1
+    ) bill on true
     where p.user_id = ${userId}
     order by p.created_at asc, p.id asc
   `;
@@ -166,19 +196,49 @@ export async function updatePendingExpense(
  * Turns the item into a normal expense and removes it from review, in one
  * statement, so approving twice can never save it twice. An attached receipt
  * becomes a receipts row linked to the expense, and "not paid yet" carries
- * over. Returns false when no row matched (missing, already handled, or not
- * this user's).
+ * over.
+ *
+ * An item that pays a fixed bill becomes that bill's payment for its month:
+ * the expense is linked to the bill (so it isn't counted twice) and the month
+ * is marked paid. A subscription with no bill becomes a new fixed bill from
+ * its month, with the expense as its first payment. Returns null when no row
+ * matched (missing, already handled, or not this user's).
  */
 export async function approvePendingExpense(
   userId: string,
   id: string,
-): Promise<boolean> {
+): Promise<{ expenseId: string; fixedItemId: string | null } | null> {
   const rows = await db()`
     with taken as (
       delete from pending_expenses
       where id = ${id} and user_id = ${userId}
-      returning user_id, spent_on, description, category, amount_cents,
-                unpaid, paid_at, paid_on, receipt
+      returning user_id, spent_on, to_char(spent_on, 'YYYY-MM') as month,
+                description, merchant, category, amount_cents, unpaid, paid_at,
+                paid_on, receipt, fixed_item_id, is_subscription
+    ),
+    bill as (
+      select f.id
+      from taken t
+      join fixed_items picked
+        on picked.id = t.fixed_item_id and picked.user_id = t.user_id
+      join fixed_items f
+        on f.user_id = t.user_id
+       and coalesce(f.series_id, f.id) = coalesce(picked.series_id, picked.id)
+       and f.start_month <= t.month
+       and (f.end_month is null or f.end_month >= t.month)
+      order by f.start_month desc
+      limit 1
+    ),
+    new_bill as (
+      insert into fixed_items (user_id, name, category, amount_cents, due_day,
+                               start_month, merchant, match_keywords)
+      select user_id, coalesce(merchant, description), category, amount_cents,
+             extract(day from spent_on)::int, month, merchant,
+             case when merchant is null then '{}'::text[]
+                  else array[merchant] end
+      from taken
+      where is_subscription is true and not exists (select 1 from bill)
+      returning id
     ),
     saved_receipt as (
       insert into receipts (user_id, merchant, purchased_on, subtotal_cents,
@@ -190,16 +250,76 @@ export async function approvePendingExpense(
       from taken
       where receipt is not null
       returning id
+    ),
+    saved as (
+      insert into expenses (user_id, month, spent_on, description, category,
+                            amount_cents, unpaid, paid_at, paid_on, receipt_id,
+                            fixed_item_id)
+      select user_id, month, spent_on, description, category, amount_cents,
+             unpaid, paid_at, paid_on, (select id from saved_receipt limit 1),
+             coalesce((select id from bill), (select id from new_bill))
+      from taken
+      returning id, user_id, month, spent_on, unpaid, paid_on, amount_cents,
+                fixed_item_id
+    ),
+    paid as (
+      insert into fixed_item_payments (user_id, fixed_item_id, month, paid_on,
+                                       amount_cents, expense_id)
+      select user_id, fixed_item_id, month,
+             case when unpaid then null else coalesce(paid_on, spent_on) end,
+             amount_cents, id
+      from saved
+      where fixed_item_id is not null
+      on conflict (fixed_item_id, month) do update
+      set paid_on = excluded.paid_on, amount_cents = excluded.amount_cents,
+          expense_id = excluded.expense_id
+      returning fixed_item_id
     )
-    insert into expenses (user_id, month, spent_on, description, category,
-                          amount_cents, unpaid, paid_at, paid_on, receipt_id)
-    select user_id, to_char(spent_on, 'YYYY-MM'), spent_on, description,
-           category, amount_cents, unpaid, paid_at, paid_on,
-           (select id from saved_receipt limit 1)
-    from taken
+    select id, fixed_item_id from saved
+  `;
+  const [row] = rows;
+  if (!row) return null;
+  return {
+    expenseId: String(row.id),
+    fixedItemId: row.fixed_item_id == null ? null : String(row.fixed_item_id),
+  };
+}
+
+/**
+ * Links an item waiting for review to the fixed bill it pays (or unlinks it
+ * with null), and records whether it's a subscription. False when no row
+ * matched.
+ */
+export async function setPendingBill(
+  userId: string,
+  id: string,
+  values: { fixedItemId?: string | null; isSubscription?: boolean | null },
+): Promise<boolean> {
+  const billGiven = values.fixedItemId !== undefined;
+  const subscriptionGiven = values.isSubscription !== undefined;
+  const rows = await db()`
+    update pending_expenses
+    set fixed_item_id = case when ${billGiven} then ${values.fixedItemId ?? null}::uuid
+                             else fixed_item_id end,
+        is_subscription = case when ${subscriptionGiven}
+                               then ${values.isSubscription ?? null}::boolean
+                               else is_subscription end
+    where id = ${id} and user_id = ${userId}
+      and (${values.fixedItemId ?? null}::uuid is null
+           or exists (select 1 from fixed_items f
+                      where f.id = ${values.fixedItemId ?? null}::uuid
+                        and f.user_id = ${userId}))
     returning id
   `;
   return rows.length > 0;
+}
+
+/** One item waiting for review, or null. */
+export async function selectPendingExpense(
+  userId: string,
+  id: string,
+): Promise<PendingExpense | null> {
+  return (await selectPendingExpenses(userId)).find((p) => p.id === id) ?? null;
 }
 
 /**
