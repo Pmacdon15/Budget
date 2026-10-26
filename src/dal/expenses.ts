@@ -98,4 +98,5 @@ export async function deleteExpense(id: string) {
   const deleted = await deleteExpenseRow(userId, id);
   if (!deleted) throw new NotFoundError();
   if (deleted.imagePathname) await deleteReceiptImage(deleted.imagePathname);
+  if (deleted.filePathname) await deleteReceiptImage(deleted.filePathname);
 }

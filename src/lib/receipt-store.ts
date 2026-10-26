@@ -16,6 +16,18 @@ export async function putReceiptImage(pathname: string, image: Blob) {
   });
 }
 
+/**
+ * A receipt file (an email's PDF attachment, or the email itself as HTML),
+ * private like the photos and served the same way.
+ */
+export async function putReceiptFile(
+  pathname: string,
+  file: Blob,
+  contentType: string,
+) {
+  await put(pathname, file, { access: "private", contentType });
+}
+
 /** The photo's bytes, or null when it is gone. */
 export async function readReceiptImage(
   pathname: string,
@@ -25,7 +37,10 @@ export async function readReceiptImage(
   return new Uint8Array(await new Response(result.stream).arrayBuffer());
 }
 
-/** Best effort: a photo left behind costs a few hundred KB, not correctness. */
+/**
+ * Best effort: a photo (or receipt file) left behind costs a few hundred KB,
+ * not correctness, and the daily cleanup removes it later.
+ */
 export async function deleteReceiptImage(pathname: string) {
   try {
     await del(pathname);

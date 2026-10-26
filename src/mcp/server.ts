@@ -158,7 +158,7 @@ export function registerBudgetTools(server: McpServer) {
     {
       title: "Add expense for review",
       description:
-        "Submits a charge you found (e.g. in an email) to the user's Pending Review list. It does not become an expense until the user approves it in Budget. Before calling, tell the user the merchant, amount and date and the category you suggest, and wait for them to confirm the category. If the answer is status 'possible_duplicate', nothing was saved: ask the user, and only resubmit with allow_duplicate: true if they say it's a separate charge. It also checks the user's fixed bills: status 'matches_fixed_bill' means nothing was saved and the charge looks like one of them; show the user the suggestion, then resubmit with fixed_bill_id (it's that bill) or is_subscription: false (a separate charge). Set is_subscription: true for a subscription with no fixed bill yet, so approving it creates one.",
+        "Submits a charge you found (e.g. in an email) to the user's Pending Review list. It does not become an expense until the user approves it in Budget. Before calling, tell the user the merchant, amount and date and the category you suggest, and wait for them to confirm the category. If the answer is status 'possible_duplicate', nothing was saved: ask the user, and only resubmit with allow_duplicate: true if they say it's a separate charge. It also checks the user's fixed bills: status 'matches_fixed_bill' means nothing was saved and the charge looks like one of them; show the user the suggestion, then resubmit with fixed_bill_id (it's that bill) or is_subscription: false (a separate charge). Set is_subscription: true for a subscription with no fixed bill yet, so approving it creates one. When the email is the bill or receipt, include it as receipt: its amounts and text, plus its PDF attachment (or a JPEG), or the email itself (receipt.email.html or text) when it has no attachment. An email already saved as a receipt (same message_id or file) answers 'possible_duplicate'.",
       inputSchema: addExpenseInputSchema,
       annotations: {
         readOnlyHint: false,
@@ -252,12 +252,12 @@ export function registerBudgetTools(server: McpServer) {
     {
       title: "Attach a receipt",
       description:
-        "Attaches a receipt from an email to a saved expense (expense_id) or an item waiting for review (pending_id), or replaces the one it has. Send what the receipt says (merchant, date, subtotal, tax, total, text) and, if the email has one, a JPEG of it. For a PDF receipt, send its text and amounts. Replacing a receipt on a split expense changes it for every part.",
+        "Saves a bill or receipt email as the receipt of a saved expense (expense_id), an item waiting for review (pending_id), or a fixed bill's payment for a month (fixed_bill_id + month, once it's marked paid), replacing the one it has. The user can then open and download it in Budget. Send what the receipt says (merchant, date, subtotal, tax, total, text) plus one copy to keep: the email's PDF attachment (pdf_base64), or a JPEG of it (image_jpeg_base64), or, when the email has no attachment, the email itself (email.html or email.text). Always send email.message_id, subject, from and date. Sending the same email again changes nothing, so it's safe to retry. Replacing a receipt on a split expense changes it for every part.",
       inputSchema: attachReceiptInputSchema,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
-        idempotentHint: false,
+        idempotentHint: true,
         openWorldHint: false,
       },
     },

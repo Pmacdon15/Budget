@@ -1,6 +1,7 @@
 import "server-only";
 import { selectPhotosInUse } from "@/db/receipt-cleanup";
 import { isOldEnoughToRemove, MAX_CLEANUP_PAGES } from "@/lib/receipt-cleanup";
+import { isReceiptFilePathname } from "@/lib/receipt-files";
 import { isReceiptImagePathname } from "@/lib/receipt-image";
 import { deleteReceiptImages, listReceiptImages } from "@/lib/receipt-store";
 import { UNDO_WINDOW_MINUTES } from "@/lib/undo";
@@ -29,11 +30,13 @@ export async function deleteUnattachedReceiptPhotos(
     const listed = await listReceiptImages(cursor);
     result.checked += listed.images.length;
 
-    // Only photos this app minted, and only once no open form could save them.
+    // Only photos and receipt files this app minted, and only once no open
+    // form could save them.
     const candidates = listed.images
       .filter(
         (image) =>
-          isReceiptImagePathname(image.pathname) &&
+          (isReceiptImagePathname(image.pathname) ||
+            isReceiptFilePathname(image.pathname)) &&
           isOldEnoughToRemove(image.uploadedAt, now),
       )
       .map((image) => image.pathname);
