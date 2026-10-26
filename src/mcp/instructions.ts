@@ -4,7 +4,7 @@
  * without the user pasting anything. Keep it in step with
  * docs/mcp-ai-guide.md, which explains the same rules to people.
  */
-export const MCP_INSTRUCTIONS = `Budget is the user's personal budgeting app. These tools let you record spending you find for them, usually in their email (receipts, bills, order confirmations, payment confirmations, bank alerts), keep their fixed bills current and keep their accounts' balances current (chequing, credit cards and lines of credit), including from statement emails. You read the email with your own email tools; Budget never reads email itself.
+export const MCP_INSTRUCTIONS = `Budget is the user's personal budgeting app. These tools let you record spending and income you find for them, usually in their email (receipts, bills, order confirmations, payment confirmations, e-Transfers and deposits they received, bank alerts), keep their fixed bills current and keep their accounts' balances current (chequing, credit cards and lines of credit), including from statement emails. You read the email with your own email tools; Budget never reads email itself.
 
 Workflow for a charge you find:
 1. Call list_categories once, list_fixed_bills, and list_expenses for the dates involved, so you can suggest a category and spot anything already recorded (as an expense, an item waiting for review, or a fixed bill).
@@ -33,6 +33,13 @@ Fixed bills: these are charges that repeat every month (rent, phone, internet, s
 - If a bill email shows a new price, tell the user the old and new amounts and, once they agree, call edit_fixed_bill with from_month set to that bill's month. Earlier months keep the old price.
 - Payments whose message says which bill they're for are payments of that fixed bill, not new expenses. For example, an e-Transfer you sent with the message "rent" (or "October rent") pays the Rent bill: find it in list_fixed_bills and call mark_bill_paid for that month. If the amount differs from the bill, tell the user and offer edit_fixed_bill. If there's no matching fixed bill, ask whether to add one with add_fixed_bill (Housing for rent), then mark it paid. Only e-Transfers you sent count; money you received isn't a bill payment.
 
+Income: money the user received (an Interac e-Transfer someone sent them, a direct deposit, a client's payment) is take-home, not spending. Look in every folder or label the user points you to, not only the inbox: payments from one client are often filed together.
+1. Call list_income for the dates involved, so you don't submit a payment that's already recorded or waiting for review.
+2. Tell the user what you found (who paid, amount, date), e.g. "DRIFT LANDSCAPING LTD sent you $1,450.00 on Oct 14 — add it as income?". Wait for them to confirm. If they say a transfer isn't income (a friend paying them back, money moved from their own account), skip it, or record_transfer for their own accounts.
+3. Call add_income with the payer, amount and date (the day it was sent, as the email shows it), a short label for the Take-home page if the user gives one, and the email as receipt: an e-Transfer notice has no attachment, so send the email itself as receipt.email.html (or text), with its message_id, subject, from and date. It goes to the user's Pending Review list; approving it makes it take-home for its month and adds it to their primary chequing account (or account_id from list_accounts when the email names another). Only deposits dated after the account's balance was last set change that balance, so recording past months' income is safe. Tell them so.
+4. If add_income answers "possible_duplicate", nothing was saved. Ask whether it's the same payment, and only resubmit with allow_duplicate: true if they say it's separate. A "you have money waiting" notice and its "deposited" confirmation are one payment.
+Only money that came in is income. An e-Transfer the user sent is spending (add_expense), or a bill payment (mark_bill_paid) when its message names a bill.
+
 Duplicates: one purchase often produces several emails (order confirmation, shipping notice, receipt, card alert). Submit it once. Two charges with the same amount on the same day count as one unless the user says otherwise.
 
 Accounts: the user can have several accounts: chequing accounts, credit cards and lines of credit. Call list_accounts to see them, with their ids, institutions, last four digits and balances. A credit card or line of credit balance is what's owed: a higher balance means the user owes more. Only chequing counts toward leftover spend (credit cards and lines of credit are left out, since a balance there may be carried on purpose), and leftover spend is never above zero while chequing is negative overall.
@@ -49,4 +56,4 @@ Editing and deleting: only call edit_expense, delete_expense or edit_fixed_bill 
 Always:
 - Use amounts exactly as written in the source, in dollars (45.67), dates as YYYY-MM-DD and months as YYYY-MM. Never guess or invent an amount, date or merchant; if the email doesn't say, ask the user or skip it.
 - Refunds are not new expenses; skip them unless the user asks. Transfers between the user's own accounts and payments of a credit card or line of credit are not expenses either: record them with record_transfer.
-- Include a short source (sender and subject) with each add_expense so the user can tell where it came from when reviewing.`;
+- Include a short source (sender and subject) with each add_expense and add_income so the user can tell where it came from when reviewing.`;

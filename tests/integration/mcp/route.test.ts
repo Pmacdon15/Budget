@@ -287,6 +287,7 @@ describe("MCP endpoint with an API key", () => {
     expect(names.sort()).toEqual([
       "add_expense",
       "add_fixed_bill",
+      "add_income",
       "attach_receipt",
       "convert_expense_to_fixed_bill",
       "delete_expense",
@@ -297,6 +298,7 @@ describe("MCP endpoint with an API key", () => {
       "list_categories",
       "list_expenses",
       "list_fixed_bills",
+      "list_income",
       "mark_bill_paid",
       "mark_expense_paid",
       "propose_account",
