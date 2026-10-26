@@ -57,6 +57,10 @@ function PendingRow({ item }: { item: PendingExpense }) {
             {item.possibleDuplicate ? (
               <Badge variant="outline">Possible duplicate</Badge>
             ) : null}
+            {item.unpaid ? <Badge variant="outline">Not paid yet</Badge> : null}
+            {item.hasReceipt ? (
+              <Badge variant="outline">Receipt attached</Badge>
+            ) : null}
           </p>
           <p className="text-muted-foreground text-sm">
             {day(item.spentOn)}

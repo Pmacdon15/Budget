@@ -13,10 +13,13 @@ import { rows } from "../../helpers/test-db";
 
 /*
  * Expenses come off the bank balance: the balance shown is the one last
- * entered, less every expense added after it. The test database's clock can
- * tick too coarsely to order two quick writes, so these tests set the
- * timestamps they depend on explicitly.
+ * entered, less every expense added after it and dated on or after the day it
+ * was entered. The test database's clock can tick too coarsely to order two
+ * quick writes, so these tests set the timestamps they depend on explicitly.
  */
+
+/** When the balance counts as entered: Oct 1 at noon in Regina. */
+const BALANCE_SET_AT = "2026-10-01T18:00:00Z";
 
 const form = (amount: string, description = "Shell"): ExpenseFormValues => ({
   description,
@@ -25,18 +28,18 @@ const form = (amount: string, description = "Shell"): ExpenseFormValues => ({
   spentOn: "2026-10-20",
 });
 
-/** Enters a balance and marks it as entered an hour ago. */
+/** Enters a balance and marks it as entered on Oct 1. */
 async function enterBalance(balance: string) {
   await setBankBalance({ balance });
-  await rows(
-    "update bank_balances set updated_at = now() - interval '1 hour' where user_id = $1",
-    ["user_a"],
-  );
+  await rows("update bank_balances set updated_at = $1 where user_id = $2", [
+    BALANCE_SET_AT,
+    "user_a",
+  ]);
 }
 
-/** Marks every existing expense as added two hours ago, before the balance. */
+/** Marks every existing expense as added on Sep 30, before the balance. */
 const backdateExpenses = () =>
-  rows("update expenses set created_at = now() - interval '2 hours'");
+  rows("update expenses set created_at = '2026-09-30T18:00:00Z'");
 
 const onlyExpenseId = async () => {
   const [row] = await rows("select id from expenses");
@@ -131,5 +134,44 @@ describe("bank balance debiting", () => {
     await createExpense(form("10"));
     await clearBankBalance();
     expect(await getBankBalance()).toBeNull();
+  });
+
+  describe("dated before the balance", () => {
+    it("leaves an older charge out even when it's added afterwards", async () => {
+      // e.g. approved from Review after the bank's balance was synced.
+      await enterBalance("1000");
+      await createExpense({ ...form("80"), spentOn: "2026-09-28" });
+      expect(await getBankBalance()).toMatchObject({
+        balanceCents: 100_000,
+        spentSinceCents: 0,
+      });
+    });
+
+    it("counts a charge dated the same day the balance was set", async () => {
+      await enterBalance("1000");
+      await createExpense({ ...form("80"), spentOn: "2026-10-01" });
+      expect((await getBankBalance())?.balanceCents).toBe(92_000);
+    });
+
+    it("uses the day in Regina, not UTC", async () => {
+      // 11:30 p.m. on Oct 1 in Regina is already Oct 2 in UTC.
+      await setBankBalance({ balance: "1000" });
+      await rows("update bank_balances set updated_at = $1", [
+        "2026-10-02T05:30:00Z",
+      ]);
+      await createExpense({ ...form("80"), spentOn: "2026-10-01" });
+      expect((await getBankBalance())?.balanceCents).toBe(92_000);
+    });
+
+    it("starts counting a moved expense once its date is on or after the balance", async () => {
+      await enterBalance("1000");
+      await createExpense({ ...form("80"), spentOn: "2026-09-28" });
+      expect((await getBankBalance())?.balanceCents).toBe(100_000);
+      await updateExpense(await onlyExpenseId(), {
+        ...form("80"),
+        spentOn: "2026-10-03",
+      });
+      expect((await getBankBalance())?.balanceCents).toBe(92_000);
+    });
   });
 });

@@ -24,6 +24,13 @@ export const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 
 export const IMAGE_CONTENT_TYPE = "image/jpeg";
 
+/** A JPEG starts with FF D8 FF, whatever its name or stated type says. */
+export const isJpeg = (bytes: Uint8Array) =>
+  bytes.length > 3 &&
+  bytes[0] === 0xff &&
+  bytes[1] === 0xd8 &&
+  bytes[2] === 0xff;
+
 export function newReceiptImagePathname(userId: string): string {
   if (!SAFE_USER_ID.test(userId)) {
     throw new Error("Cannot build a photo pathname for this user id.");

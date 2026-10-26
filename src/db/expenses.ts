@@ -23,6 +23,14 @@ export type ReceiptValues = {
   rawText: string | null;
 };
 
+/** The same, for a receipt that may have no photo (one read off an email). */
+export type ReceiptValuesNullableImage = Omit<
+  ReceiptValues,
+  "imagePathname"
+> & {
+  imagePathname: string | null;
+};
+
 function toDateString(value: unknown): string {
   if (value instanceof Date) return value.toISOString().slice(0, 10);
   return value == null ? "" : String(value).slice(0, 10);
@@ -39,6 +47,10 @@ export const toExpense = (r: Row): Expense => ({
   category: r.category,
   amountCents: Number(r.amount_cents),
   receiptId: r.receipt_id ?? null,
+  ...(r.receipt_has_photo === undefined
+    ? {}
+    : { receiptHasPhoto: Boolean(r.receipt_has_photo) }),
+  ...(r.unpaid === undefined ? {} : { unpaid: Boolean(r.unpaid) }),
 });
 
 export async function selectExpensesBetween(
@@ -47,7 +59,10 @@ export async function selectExpensesBetween(
   to: string,
 ): Promise<Expense[]> {
   const rows = await db()`
-    select id, month, spent_on, description, category, amount_cents, receipt_id
+    select id, month, spent_on, description, category, amount_cents, receipt_id,
+           unpaid,
+           (select r.image_pathname is not null from receipts r
+            where r.id = expenses.receipt_id) as receipt_has_photo
     from expenses
     where user_id = ${userId} and month between ${from} and ${to}
     order by spent_on desc, created_at desc
@@ -227,4 +242,118 @@ export async function selectReceiptImage(
     where id = ${receiptId} and user_id = ${userId}
   `;
   return rows[0]?.image_pathname ?? null;
+}
+
+/** An expense as the AI tools list it: its status included. */
+export type ExpenseWithStatus = Expense & {
+  unpaid: boolean;
+  hasReceipt: boolean;
+};
+
+/** This user's expenses dated `from`..`to` (YYYY-MM-DD), newest first. */
+export async function selectExpensesWithStatus(
+  userId: string,
+  from: string,
+  to: string,
+): Promise<ExpenseWithStatus[]> {
+  const rows = await db()`
+    select id, month, spent_on, description, category, amount_cents, receipt_id,
+           unpaid
+    from expenses
+    where user_id = ${userId} and spent_on between ${from} and ${to}
+    order by spent_on desc, created_at desc
+  `;
+  return rows.map((r) => ({
+    ...toExpense(r),
+    unpaid: Boolean(r.unpaid),
+    hasReceipt: r.receipt_id != null,
+  }));
+}
+
+/**
+ * Marks one of this user's unpaid expenses paid on `paidOn`. From then on it
+ * comes off the bank balance, if it was paid after the balance was set.
+ * Returns "paid", "already" (it wasn't unpaid) or "missing".
+ */
+export async function markExpensePaidRow(
+  userId: string,
+  id: string,
+  paidOn: string,
+): Promise<"paid" | "already" | "missing"> {
+  const rows = await db()`
+    with target as (
+      select id, unpaid from expenses where id = ${id} and user_id = ${userId}
+    ),
+    paid as (
+      update expenses e set unpaid = false, paid_at = now(), paid_on = ${paidOn}
+      from target
+      where e.id = target.id and target.unpaid
+      returning e.id
+    )
+    select (select unpaid from target) as was_unpaid,
+           (select count(*) from paid)::int as paid
+  `;
+  const [row] = rows;
+  if (row?.was_unpaid == null) return "missing";
+  return Number(row.paid) > 0 ? "paid" : "already";
+}
+
+/**
+ * Attaches a receipt to one of this user's expenses, or replaces the details
+ * (and photo) of the one it has. A receipt split across several expenses is
+ * shared, so replacing it changes it for every part. Returns the old photo when
+ * a different one replaced it, so the caller can remove it; or false when the
+ * expense is missing or someone else's.
+ */
+export async function setExpenseReceipt(
+  userId: string,
+  expenseId: string,
+  receipt: ReceiptValuesNullableImage,
+): Promise<{ replacedImage: string | null } | false> {
+  const rows = await db()`
+    with target as (
+      select id, receipt_id from expenses
+      where id = ${expenseId} and user_id = ${userId}
+    ),
+    old as (
+      select r.image_pathname from receipts r, target
+      where r.id = target.receipt_id and r.user_id = ${userId}
+    ),
+    updated as (
+      update receipts r
+      set merchant = ${receipt.merchant}, purchased_on = ${receipt.purchasedOn},
+          subtotal_cents = ${receipt.subtotalCents}, tax_cents = ${receipt.taxCents},
+          total_cents = ${receipt.totalCents}, raw_text = ${receipt.rawText},
+          image_pathname = ${receipt.imagePathname}
+      from target
+      where r.id = target.receipt_id and r.user_id = ${userId}
+      returning r.id
+    ),
+    inserted as (
+      insert into receipts (user_id, merchant, purchased_on, subtotal_cents,
+                            tax_cents, total_cents, raw_text, image_pathname)
+      select ${userId}, ${receipt.merchant}, ${receipt.purchasedOn},
+             ${receipt.subtotalCents}, ${receipt.taxCents}, ${receipt.totalCents},
+             ${receipt.rawText}, ${receipt.imagePathname}
+      from target
+      where target.receipt_id is null
+      returning id
+    ),
+    linked as (
+      update expenses e set receipt_id = inserted.id
+      from inserted
+      where e.id = ${expenseId} and e.user_id = ${userId}
+      returning e.id
+    )
+    select (select count(*) from target)::int as found,
+           (select image_pathname from old limit 1) as old_image,
+           (select count(*) from updated)::int + (select count(*) from linked)::int as changed
+  `;
+  const [row] = rows;
+  if (!row || Number(row.found) === 0) return false;
+  const oldImage = row.old_image ?? null;
+  return {
+    replacedImage:
+      oldImage && oldImage !== receipt.imagePathname ? String(oldImage) : null,
+  };
 }

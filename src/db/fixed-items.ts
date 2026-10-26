@@ -43,15 +43,18 @@ export async function selectFixedItem(
   return row ? toFixedItem(row) : null;
 }
 
+/** Returns the new item's id. */
 export async function insertFixedItem(
   userId: string,
   values: FixedItemValues & { startMonth: string; endMonth?: string | null },
-) {
-  await db()`
+): Promise<string> {
+  const [row] = await db()`
     insert into fixed_items (user_id, name, category, amount_cents, due_day, start_month, end_month)
     values (${userId}, ${values.name}, ${values.category}, ${values.amountCents},
             ${values.dueDay}, ${values.startMonth}, ${values.endMonth ?? null})
+    returning id
   `;
+  return String(row?.id);
 }
 
 export async function updateFixedItemValues(

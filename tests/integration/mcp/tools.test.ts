@@ -168,7 +168,8 @@ describe("approving what the AI added", () => {
   it("becomes one normal expense that comes off the bank balance once", async () => {
     await setBankBalance({ balance: "500" });
     await rows(
-      "update bank_balances set updated_at = now() - interval '1 hour'",
+      // Entered Oct 1, so the Oct 20 charges below count.
+      "update bank_balances set updated_at = '2026-10-01T18:00:00Z'",
     );
     const { data } = await addExpense(A, shell);
     expect((await getBankBalance())?.balanceCents).toBe(50_000);
@@ -185,7 +186,8 @@ describe("sync_bank_balance", () => {
   it("sets the balance to what the bank says, never subtracting", async () => {
     await setBankBalance({ balance: "1000" });
     await rows(
-      "update bank_balances set updated_at = now() - interval '1 hour'",
+      // Entered Oct 1, so the Oct 20 charge below counts.
+      "update bank_balances set updated_at = '2026-10-01T18:00:00Z'",
     );
     await savedExpense("Shell", "45.67");
     expect((await getBankBalance())?.balanceCents).toBe(100_000 - 4_567);
@@ -194,6 +196,14 @@ describe("sync_bank_balance", () => {
     const result = await syncBankBalance(A, { balance: 954.33 });
     expect(result.data).toMatchObject({ balance: 954.33 });
     expect((await getBankBalance())?.balanceCents).toBe(95_433);
+  });
+
+  it("doesn't take older charges off again when they're approved after a sync", async () => {
+    // The AI syncs today's balance, then the user approves an Oct 17 charge.
+    await syncBankBalance(A, { balance: -774.61 });
+    const { data } = await addExpense(A, { ...shell, date: "2026-10-17" });
+    expect(await approvePendingExpense(String(data.id))).toEqual({ ok: true });
+    expect((await getBankBalance())?.balanceCents).toBe(-77_461);
   });
 
   it("takes an overdrawn balance", async () => {
@@ -223,6 +233,8 @@ describe("list_expenses", () => {
         description: "Costco run",
         category: "Groceries",
         amount: 123.45,
+        unpaid: false,
+        has_receipt: false,
       },
     ]);
     expect(result.data.pending_review).toEqual([

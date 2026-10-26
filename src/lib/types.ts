@@ -27,6 +27,10 @@ export type Expense = {
   amountCents: number;
   /** The scanned receipt saved with this expense, if any. */
   receiptId: string | null;
+  /** False when the receipt was read off an email and has no photo to open. */
+  receiptHasPhoto?: boolean;
+  /** Not paid yet, so it stays off the bank balance until it's marked paid. */
+  unpaid?: boolean;
 };
 
 /** One expense line in a download, with what was read off its receipt. */
