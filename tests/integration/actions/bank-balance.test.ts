@@ -28,7 +28,7 @@ describe("bank balance actions", () => {
     await setBankBalance({ balance: "500" });
     await setBankBalance({ balance: "-20" });
     expect((await getBankBalance())?.balanceCents).toBe(-2_000);
-    expect(await rows("select * from bank_balances")).toHaveLength(1);
+    expect(await rows("select * from accounts")).toHaveLength(1);
   });
 
   it("reports a typo next to the field and saves nothing", async () => {
@@ -65,6 +65,6 @@ describe("bank balance actions", () => {
     expect(await setBankBalance({ balance: "10" })).toMatchObject({
       ok: false,
     });
-    expect(await rows("select * from bank_balances")).toHaveLength(0);
+    expect(await rows("select * from accounts")).toHaveLength(0);
   });
 });

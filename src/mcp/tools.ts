@@ -293,11 +293,12 @@ export async function syncBankBalance(
 ): Promise<ToolResult> {
   const input = syncBankBalanceInputSchema.parse(args);
   const balanceCents = toCents(input.balance);
-  await upsertBankBalance(caller.userId, balanceCents);
+  await upsertBankBalance(caller.userId, balanceCents, input.source || "alert");
   const saved = await selectBankBalance(caller.userId);
   return {
-    summary: `Bank balance set to $${input.balance.toFixed(2)}. Expenses dated today or later, added from now on, come off it; anything dated earlier is already in this number.`,
+    summary: `Bank balance (${saved?.accountName ?? "Chequing"}, the account expenses come off) set to $${input.balance.toFixed(2)}. Expenses dated today or later, added from now on, come off it; anything dated earlier is already in this number. When the email names another account, use update_account_balance instead.`,
     data: {
+      account_id: saved?.accountId ?? null,
       balance: dollars(saved?.balanceCents ?? balanceCents),
       updated_at: saved?.updatedAt ?? null,
     },

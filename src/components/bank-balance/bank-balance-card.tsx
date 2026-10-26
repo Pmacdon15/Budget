@@ -1,10 +1,13 @@
 import { Landmark } from "lucide-react";
+import Link from "next/link";
 import { Suspense } from "react";
 import { TextSkeleton } from "@/components/skeletons";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getAccounts } from "@/dal/accounts";
 import { getBankBalance } from "@/dal/bank-balance";
+import { netChequingCents } from "@/lib/accounts";
 import {
   balanceDebitLabel,
   balanceUpdatedLabel,
@@ -15,8 +18,10 @@ import { cn } from "@/lib/utils";
 import { BankBalanceActions } from "./bank-balance-actions";
 
 /**
- * What's in the bank right now: the balance the user last entered, less the
- * expenses added since. It isn't tied to
+ * What's in the bank right now: the primary chequing account's balance as the
+ * user last entered it, less the expenses added since. With more than one
+ * account it also shows net chequing (what leftover spend counts) and links
+ * to the Accounts page. It isn't tied to
  * the month being viewed, but its holes still wait for the URL (`month`) first
  * and only then read the session and database, so the static shell never needs
  * either. The frame and label are in the shell; both holes share one read
@@ -79,19 +84,44 @@ async function BalanceValue({ month }: Props) {
 
 async function BalanceDetails({ month }: Props) {
   await month;
-  const balance = await getBankBalance();
+  const [balance, accounts] = await Promise.all([
+    getBankBalance(),
+    getAccounts(),
+  ]);
   const debit = balance ? balanceDebitLabel(balance) : null;
+  const several = accounts.length > 1;
+  const chequingCount = accounts.filter((a) => a.type === "chequing").length;
+  const net = netChequingCents(accounts);
   return (
     <div className="flex flex-1 flex-wrap items-center justify-between gap-3">
       <div className="text-muted-foreground text-sm">
         <p>
           {balance
-            ? balanceUpdatedLabel(balance.updatedAt)
+            ? `${several ? `${balance.accountName} · ` : ""}${balanceUpdatedLabel(balance.updatedAt)}`
             : "Add what's in your account now. Negative is fine if you're overdrawn."}
         </p>
         {debit ? <p>{debit}</p> : null}
+        {chequingCount > 1 && net !== null ? (
+          <p>
+            Net chequing across {chequingCount} accounts:{" "}
+            <span
+              className={cn(
+                "tabular-nums",
+                net < 0 && "text-rose-600 dark:text-rose-400",
+              )}
+            >
+              {formatMoney(net)}
+            </span>
+          </p>
+        ) : null}
       </div>
-      <BankBalanceActions balance={balance} />
+      {several ? (
+        <Link href="/accounts" className="text-sm underline underline-offset-4">
+          Manage accounts
+        </Link>
+      ) : (
+        <BankBalanceActions balance={balance} />
+      )}
     </div>
   );
 }

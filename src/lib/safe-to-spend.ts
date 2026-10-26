@@ -1,8 +1,11 @@
+import { leftoverSpend } from "@/lib/leftover";
 import { lastDayOf } from "@/lib/month";
 
 /*
  * "Safe to spend": what's left of this month's take-home after fixed bills and
- * spending so far, spread over the days left. Pure, so it's easy to test.
+ * spending so far, spread over the days left. Like leftover spend, it's held
+ * to the money in chequing: when chequing is negative overall, nothing is
+ * safe to spend. Pure, so it's easy to test.
  */
 
 /**
@@ -18,7 +21,10 @@ export function daysLeftInMonth(month: string, todayDate: string): number {
 }
 
 export type SafeToSpend = {
-  /** Take-home minus fixed bills and spending; negative when over. */
+  /**
+   * Take-home minus fixed bills and spending, held to net chequing; negative
+   * when over budget, and 0 while chequing is negative.
+   */
   leftCents: number;
   daysLeft: number;
   /** What can go out each remaining day; 0 when nothing is left. */
@@ -29,12 +35,18 @@ export function safeToSpend({
   incomeCents,
   spentCents,
   daysLeft,
+  netChequingCents = null,
 }: {
   incomeCents: number;
   spentCents: number;
   daysLeft: number;
+  /** All chequing accounts combined; null (no accounts) leaves the budget as is. */
+  netChequingCents?: number | null;
 }): SafeToSpend {
-  const leftCents = incomeCents - spentCents;
+  const { leftoverCents: leftCents } = leftoverSpend(
+    incomeCents - spentCents,
+    netChequingCents,
+  );
   const perDayCents =
     leftCents > 0 && daysLeft > 0 ? Math.floor(leftCents / daysLeft) : 0;
   return { leftCents, daysLeft, perDayCents };
