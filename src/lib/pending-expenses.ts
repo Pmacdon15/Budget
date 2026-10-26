@@ -27,6 +27,15 @@ export type PendingExpense = {
   unpaid: boolean;
   /** The AI attached a receipt (details read off an email, maybe a photo). */
   hasReceipt: boolean;
+  /** The fixed bill it pays, if the AI matched one: approving marks that month paid. */
+  fixedItemId?: string | null;
+  fixedItemName?: string | null;
+  /** That bill's amount in the item's month. */
+  fixedItemAmountCents?: number | null;
+  /** That bill's amount is the user's estimate. */
+  fixedItemIsEstimate?: boolean;
+  /** A subscription: with no bill, approving makes it a new fixed bill. Null: unknown. */
+  isSubscription?: boolean | null;
 };
 
 /** What an AI read off an emailed receipt, kept with the expense like a scan. */
@@ -169,6 +178,18 @@ export const addExpenseInputSchema = z.object({
     .describe(
       "The receipt, when the email is one: its details and optionally a JPEG.",
     ),
+  is_subscription: z
+    .union([z.boolean(), z.literal("unknown")])
+    .optional()
+    .describe(
+      "true when the email says it repeats (subscription, monthly plan, auto-renewal) or the user says so: approving it makes it a fixed bill. false for usage charges, credits and one-offs (e.g. API credits, prepaid extra usage): it's never matched to a fixed bill. 'unknown' (the default) when you can't tell: ask the user.",
+    ),
+  fixed_bill_id: z
+    .uuid()
+    .optional()
+    .describe(
+      "The fixed bill this charge pays, from find_matching_fixed_bill or list_fixed_bills, once the user agreed. Approving marks that month paid instead of adding separate spending.",
+    ),
 });
 
 export type AddExpenseInput = z.output<typeof addExpenseInputSchema>;
@@ -252,6 +273,19 @@ const dueDay = z
   .min(1, "The due day must be between 1 and 31")
   .max(31, "The due day must be between 1 and 31");
 
+const matchKeywords = z
+  .array(z.string().trim().min(1).max(60))
+  .max(10, "Give at most 10 names")
+  .describe(
+    "Names this bill's charges show up under, e.g. ['Google Play', 'Google One'], so later charges match it.",
+  );
+
+const merchantName = z
+  .string()
+  .trim()
+  .max(120)
+  .describe("Who charges it, as it shows on the email or statement.");
+
 export const addFixedBillInputSchema = z.object({
   name: label("Name").describe("e.g. 'Internet' or 'Google AI Pro'."),
   category: z
@@ -266,13 +300,23 @@ export const addFixedBillInputSchema = z.object({
     .describe(
       "The first month it applies to, YYYY-MM. Defaults to this month.",
     ),
+  merchant: merchantName.optional(),
+  match_keywords: matchKeywords.optional(),
+  is_estimate: z
+    .boolean()
+    .optional()
+    .describe(
+      "True when the amount is a guess; the first real charge replaces it.",
+    ),
 });
 
 export const editFixedBillInputSchema = z.object({
   id: z.uuid().describe("The bill's id, from list_fixed_bills."),
-  from_month: yearMonth.describe(
-    "The first month the change applies to, YYYY-MM: usually the month of the bill that showed the new price. Earlier months keep the old values.",
-  ),
+  from_month: yearMonth
+    .optional()
+    .describe(
+      "The first month the change applies to, YYYY-MM: usually the month of the bill that showed the new price. Earlier months keep the old values (that's the bill's amount history). Defaults to this month.",
+    ),
   amount: dollars.optional().describe("New monthly amount, in dollars."),
   name: label("Name").optional(),
   category: z.enum(CATEGORY_NAMES).optional(),
@@ -280,12 +324,88 @@ export const editFixedBillInputSchema = z.object({
     .nullable()
     .optional()
     .describe("New due day, or null for none."),
+  merchant: merchantName.nullable().optional(),
+  match_keywords: matchKeywords.optional(),
+  is_estimate: z
+    .boolean()
+    .optional()
+    .describe(
+      "false once the amount is real. Changing the amount clears it unless you pass true.",
+    ),
 });
 
 export const markBillPaidInputSchema = z.object({
   id: z.uuid().describe("The bill's id, from list_fixed_bills."),
   month: yearMonth.describe("The month that was paid, YYYY-MM."),
+  paid_on: isoDate
+    .optional()
+    .describe(
+      "The day the money left, YYYY-MM-DD. With it (and no expense_id) the bill comes off the bank balance like an expense.",
+    ),
+  expense_id: z
+    .uuid()
+    .optional()
+    .describe(
+      "A saved expense that is this bill's payment (from list_expenses): it's linked to the bill, so it counts once. This is how to merge a standalone expense into a fixed bill.",
+    ),
+  update_amount: z
+    .boolean()
+    .optional()
+    .describe(
+      "With expense_id: also set the bill's amount to that expense's, from this month on, and clear the estimate flag. Only after the user agreed.",
+    ),
 });
+
+/** What `find_matching_fixed_bill` takes. */
+export const findMatchingFixedBillInputSchema = z.object({
+  merchant: label("Merchant").describe("Who charged it, e.g. 'Google Play'."),
+  description: z
+    .string()
+    .trim()
+    .max(200)
+    .optional()
+    .describe("What it was for, e.g. 'Google One AI Premium (monthly)'."),
+  amount: dollars.describe("The amount charged, in dollars."),
+  date: isoDate.describe("The day it was charged, YYYY-MM-DD."),
+  tolerance_percent: z
+    .number()
+    .min(0)
+    .max(100)
+    .optional()
+    .describe(
+      "How far the amount may be from a bill's and still count as that bill at a new price. Default 15.",
+    ),
+});
+
+/** A saved expense or an item waiting for review: exactly one. */
+const oneExpense = {
+  expense_id: z
+    .uuid()
+    .optional()
+    .describe("A saved expense's id, from list_expenses."),
+  pending_id: z
+    .uuid()
+    .optional()
+    .describe("An id from list_expenses' pending_review, or from add_expense."),
+};
+
+const exactlyOne = (value: { expense_id?: string; pending_id?: string }) =>
+  Boolean(value.expense_id) !== Boolean(value.pending_id);
+
+export const convertExpenseToFixedBillInputSchema = z
+  .object({
+    ...oneExpense,
+    name: label("Name").optional().describe("Defaults to the expense's."),
+    category: z.enum(CATEGORY_NAMES).optional(),
+    due_day: dueDay.optional().describe("Defaults to the day it was charged."),
+    merchant: merchantName.optional(),
+    match_keywords: matchKeywords.optional(),
+  })
+  .refine(exactlyOne, "Give exactly one of expense_id or pending_id");
+
+export const unlinkFixedBillInputSchema = z
+  .object(oneExpense)
+  .refine(exactlyOne, "Give exactly one of expense_id or pending_id");
 
 /** "Possible duplicate: Shell, $45.67 on 2026-10-20 (already saved)". */
 export function duplicateMessage(match: DuplicateMatch) {

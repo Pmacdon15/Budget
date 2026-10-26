@@ -1,7 +1,12 @@
 import "server-only";
 import { updateFixedItemFor } from "@/dal/fixed-items";
 import { selectBankBalance, upsertBankBalance } from "@/db/bank-balance";
-import { insertBillPayment, selectPaidBillIds } from "@/db/bill-payments";
+import {
+  insertBillPayment,
+  linkExpenseToBillRow,
+  selectPaidBillIds,
+  unlinkExpenseFromBillRow,
+} from "@/db/bill-payments";
 import {
   deleteExpenseRow,
   markExpensePaidRow,
@@ -13,15 +18,26 @@ import {
 import {
   insertFixedItem,
   selectFixedItem,
+  selectFixedItemHistory,
+  selectFixedItemInMonth,
   selectFixedItems,
+  selectLastCharges,
 } from "@/db/fixed-items";
 import {
   insertPendingExpense,
   markPendingPaid,
   selectDuplicateMatch,
+  selectPendingExpense,
   selectPendingExpenses,
+  setPendingBill,
   setPendingReceipt,
 } from "@/db/pending-expenses";
+import {
+  type BillMatch,
+  cleanKeywords,
+  DEFAULT_AMOUNT_TOLERANCE,
+  matchBills,
+} from "@/lib/bill-matching";
 import { isActive } from "@/lib/budget";
 import { CATEGORIES, isCategory } from "@/lib/categories";
 import { currentMonth, monthOfDate, today } from "@/lib/month";
@@ -30,10 +46,12 @@ import {
   addExpenseInputSchema,
   addFixedBillInputSchema,
   attachReceiptInputSchema,
+  convertExpenseToFixedBillInputSchema,
   deleteExpenseInputSchema,
   duplicateMessage,
   editExpenseInputSchema,
   editFixedBillInputSchema,
+  findMatchingFixedBillInputSchema,
   listExpensesInputSchema,
   listFixedBillsInputSchema,
   markBillPaidInputSchema,
@@ -42,6 +60,7 @@ import {
   type ReceiptInput,
   syncBankBalanceInputSchema,
   toCents,
+  unlinkFixedBillInputSchema,
 } from "@/lib/pending-expenses";
 import {
   isJpeg,
@@ -49,6 +68,7 @@ import {
   newReceiptImagePathname,
 } from "@/lib/receipt-image";
 import { deleteReceiptImage, putReceiptImage } from "@/lib/receipt-store";
+import type { FixedItem } from "@/lib/types";
 
 /*
  * What each MCP tool does, as plain functions of the verified caller. The
@@ -194,6 +214,7 @@ export async function listExpenses(
         amount: dollars(e.amountCents),
         unpaid: e.unpaid,
         has_receipt: e.hasReceipt,
+        fixed_bill_id: e.fixedItemId ?? null,
       })),
       pending_review: pending.map((p) => ({
         id: p.id,
@@ -204,6 +225,8 @@ export async function listExpenses(
         amount: dollars(p.amountCents),
         unpaid: p.unpaid,
         has_receipt: p.hasReceipt,
+        fixed_bill_id: p.fixedItemId ?? null,
+        is_subscription: p.isSubscription ?? "unknown",
       })),
     },
   };
@@ -246,6 +269,37 @@ async function addExpenseFor(
     }
   }
 
+  const month = monthOfDate(input.date);
+  let fixedItemId: string | null = null;
+  if (input.fixed_bill_id) {
+    const bill = await selectFixedItemInMonth(
+      caller.userId,
+      input.fixed_bill_id,
+      month,
+    );
+    if (!bill) {
+      return {
+        summary: `That fixed bill isn't active in ${month}. Call list_fixed_bills for that month.`,
+        data: { fixed_bill_id: input.fixed_bill_id },
+        isError: true,
+      };
+    }
+    fixedItemId = bill.id;
+  } else if (input.is_subscription !== false) {
+    const matches = matchBills(await activeBills(caller.userId, month), {
+      merchant: input.merchant,
+      description: input.description,
+      amountCents,
+      date: input.date,
+    });
+    if (matches.length > 0) {
+      return {
+        summary: `Nothing was saved: this may be a fixed bill the user already has. ${matches[0]?.suggestion} Ask the user. If it is that bill, call add_expense again with fixed_bill_id (and, if the amount changed, edit_fixed_bill first, or let them choose Replace on the Review page). If it's a separate charge, call add_expense again with is_subscription: false.`,
+        data: { status: "matches_fixed_bill", matches: matches.map(matchData) },
+      };
+    }
+  }
+
   const receipt = input.receipt
     ? await storeReceipt(caller.userId, input.receipt)
     : null;
@@ -259,8 +313,18 @@ async function addExpenseFor(
     client: caller.client,
     unpaid: input.unpaid ?? false,
     receipt,
+    fixedItemId,
+    isSubscription:
+      input.is_subscription === undefined || input.is_subscription === "unknown"
+        ? null
+        : input.is_subscription,
   });
   const notes = [
+    fixedItemId
+      ? "It pays a fixed bill: approving marks that month paid, so it isn't counted twice. If the amount differs, the user can choose Replace on the Review page to update the bill."
+      : input.is_subscription === true
+        ? "Marked as a subscription: approving it adds it as a fixed bill."
+        : null,
     input.unpaid
       ? "Marked not paid yet: it stays off the bank balance until mark_expense_paid."
       : null,
@@ -274,6 +338,7 @@ async function addExpenseFor(
       review_url: REVIEW_URL,
       unpaid: input.unpaid ?? false,
       has_receipt: receipt !== null,
+      fixed_bill_id: fixedItemId,
     },
   };
 }
@@ -429,26 +494,36 @@ export function attachReceipt(
   });
 }
 
-const billData = (
-  bill: {
-    id: string;
-    name: string;
-    category: string;
-    amountCents: number;
-    dueDay: number | null;
-    startMonth: string;
-    endMonth: string | null;
-  },
-  paid?: boolean,
-) => ({
+const billData = (bill: FixedItem, paid?: boolean) => ({
   id: bill.id,
   name: bill.name,
   category: bill.category,
   amount: dollars(bill.amountCents),
+  is_estimate: bill.isEstimate ?? false,
+  frequency: "monthly",
   due_day: bill.dueDay,
+  merchant: bill.merchant ?? null,
+  match_keywords: bill.matchKeywords ?? [],
   start_month: bill.startMonth,
   end_month: bill.endMonth,
   ...(paid === undefined ? {} : { paid_this_month: paid }),
+});
+
+/** The user's bills active in `month`. */
+async function activeBills(userId: string, month: string) {
+  return (await selectFixedItems(userId)).filter((b) => isActive(b, month));
+}
+
+const matchData = (m: BillMatch) => ({
+  fixed_bill_id: m.bill.id,
+  name: m.bill.name,
+  bill_amount: dollars(m.bill.amountCents),
+  is_estimate: m.bill.isEstimate ?? false,
+  match: m.kind,
+  score: m.score,
+  amount_difference: dollars(m.differenceCents),
+  looks_like_usage: m.looksLikeUsage,
+  suggestion: m.suggestion,
 });
 
 export async function listFixedBills(
@@ -461,11 +536,65 @@ export async function listFixedBills(
     isActive(b, month),
   );
   const paid = new Set(await selectPaidBillIds(caller.userId, month));
+  const [history, lastCharges] = await Promise.all([
+    selectFixedItemHistory(caller.userId),
+    selectLastCharges(caller.userId),
+  ]);
+
+  // Saved expenses this month that look like a bill but aren't linked to it:
+  // suggest merging them (mark_bill_paid with expense_id) so they count once.
+  const monthStart = `${month}-01`;
+  const monthEnd = `${month}-31`;
+  const loose = (
+    await selectExpensesWithStatus(caller.userId, monthStart, monthEnd)
+  ).filter((e) => !e.fixedItemId);
+  const unlinked = new Map<string, Record<string, unknown>[]>();
+  for (const e of loose) {
+    for (const m of matchBills(
+      bills.filter((b) => !paid.has(b.id)),
+      {
+        merchant: e.description,
+        amountCents: e.amountCents,
+        date: e.spentOn,
+      },
+    )) {
+      const list = unlinked.get(m.bill.id) ?? [];
+      list.push({
+        expense_id: e.id,
+        date: e.spentOn,
+        description: e.description,
+        amount: dollars(e.amountCents),
+        suggestion: `"${e.description}" (${money(e.amountCents)} on ${e.spentOn}) looks like ${m.bill.name}. Merge it into the fixed bill (mark_bill_paid with expense_id) so it counts once?`,
+      });
+      unlinked.set(m.bill.id, list);
+    }
+  }
+
+  const withMerges = [...unlinked.values()].flat().length;
   return {
-    summary: `${bills.length} fixed bill(s) in ${month}, ${bills.filter((b) => paid.has(b.id)).length} marked paid.`,
+    summary: `${bills.length} fixed bill(s) in ${month}, ${bills.filter((b) => paid.has(b.id)).length} marked paid.${withMerges ? ` ${withMerges} saved expense(s) look like one of these bills but aren't linked: suggest merging them.` : ""}`,
     data: {
       month,
-      bills: bills.map((b) => billData(b, paid.has(b.id))),
+      bills: bills.map((b) => {
+        const series = b.seriesId ?? b.id;
+        const last = lastCharges.get(series);
+        return {
+          ...billData(b, paid.has(b.id)),
+          last_charged_on: last?.paidOn ?? null,
+          last_charged_amount: last ? dollars(last.amountCents) : null,
+          amount_history: history
+            .filter((h) => h.seriesId === series)
+            .map((h) => ({
+              from_month: h.startMonth,
+              to_month: h.endMonth,
+              amount: dollars(h.amountCents),
+              is_estimate: h.isEstimate,
+            })),
+          ...(unlinked.has(b.id)
+            ? { possible_unlinked_expenses: unlinked.get(b.id) }
+            : {}),
+        };
+      }),
     },
   };
 }
@@ -482,9 +611,12 @@ export async function addFixedBill(
     amountCents: toCents(input.amount),
     dueDay: input.due_day ?? null,
     startMonth,
+    merchant: input.merchant || null,
+    matchKeywords: cleanKeywords(input.match_keywords ?? []),
+    isEstimate: input.is_estimate ?? false,
   });
   return {
-    summary: `Added fixed bill ${input.name}, ${money(toCents(input.amount))} a month from ${startMonth}.`,
+    summary: `Added fixed bill ${input.name}, ${money(toCents(input.amount))} a month from ${startMonth}${input.is_estimate ? " (an estimate)" : ""}.`,
     data: {
       id,
       name: input.name,
@@ -499,32 +631,47 @@ export async function editFixedBill(
   args: unknown,
 ): Promise<ToolResult> {
   const input = editFixedBillInputSchema.parse(args);
-  const bill = await selectFixedItem(caller.userId, input.id);
-  if (!bill) return notFound("fixed bill", "list_fixed_bills");
-  if (!isActive(bill, input.from_month)) {
+  const fromMonth = input.from_month ?? currentMonth();
+  const picked = await selectFixedItem(caller.userId, input.id);
+  if (!picked) return notFound("fixed bill", "list_fixed_bills");
+  // An id from an earlier month still finds the row that runs in fromMonth.
+  const bill =
+    (await selectFixedItemInMonth(caller.userId, input.id, fromMonth)) ??
+    picked;
+  if (!isActive(bill, fromMonth)) {
     return {
-      summary: `${bill.name} isn't active in ${input.from_month}. Pick a month it runs in (from ${bill.startMonth}${bill.endMonth ? ` to ${bill.endMonth}` : ""}).`,
+      summary: `${bill.name} isn't active in ${fromMonth}. Pick a month it runs in (from ${bill.startMonth}${bill.endMonth ? ` to ${bill.endMonth}` : ""}).`,
       data: billData(bill),
       isError: true,
     };
   }
   const amountCents =
     input.amount === undefined ? bill.amountCents : toCents(input.amount);
-  await updateFixedItemFor(caller.userId, input.id, {
+  // A real amount replaces an estimate unless the AI says it's still one.
+  const isEstimate =
+    input.is_estimate ??
+    (input.amount !== undefined && amountCents !== bill.amountCents
+      ? false
+      : undefined);
+  await updateFixedItemFor(caller.userId, bill.id, {
     name: input.name ?? bill.name,
     category:
       input.category ?? (isCategory(bill.category) ? bill.category : "Other"),
     amount: amountCents,
     dueDay: input.due_day === undefined ? bill.dueDay : input.due_day,
-    month: input.from_month,
+    month: fromMonth,
+    isEstimate,
+    matchKeywords: input.match_keywords,
+    merchant: input.merchant,
   });
   return {
-    summary: `${input.name ?? bill.name} updated from ${input.from_month} on${input.amount === undefined ? "" : `: ${money(bill.amountCents)} → ${money(amountCents)}`}. Earlier months keep the old values.`,
+    summary: `${input.name ?? bill.name} updated from ${fromMonth} on${input.amount === undefined ? "" : `: ${money(bill.amountCents)} → ${money(amountCents)}`}. Earlier months keep the old values.`,
     data: {
       name: input.name ?? bill.name,
-      from_month: input.from_month,
+      from_month: fromMonth,
       amount: dollars(amountCents),
       previous_amount: dollars(bill.amountCents),
+      is_estimate: isEstimate ?? bill.isEstimate ?? false,
     },
   };
 }
@@ -534,7 +681,9 @@ export async function markBillPaid(
   args: unknown,
 ): Promise<ToolResult> {
   const input = markBillPaidInputSchema.parse(args);
-  const bill = await selectFixedItem(caller.userId, input.id);
+  const bill =
+    (await selectFixedItemInMonth(caller.userId, input.id, input.month)) ??
+    (await selectFixedItem(caller.userId, input.id));
   if (!bill) return notFound("fixed bill", "list_fixed_bills");
   if (!isActive(bill, input.month)) {
     return {
@@ -543,9 +692,185 @@ export async function markBillPaid(
       isError: true,
     };
   }
-  await insertBillPayment(caller.userId, bill.id, input.month);
+  if (input.expense_id) {
+    const expense = await selectExpenseById(caller.userId, input.expense_id);
+    if (!expense) return notFound("expense", "list_expenses");
+    if (expense.month !== input.month) {
+      return {
+        summary: `That expense is in ${expense.month}, not ${input.month}. Mark the bill paid for ${expense.month} instead.`,
+        data: { expense_id: input.expense_id, month: expense.month },
+        isError: true,
+      };
+    }
+    let target = bill;
+    if (input.update_amount && expense.amountCents !== bill.amountCents) {
+      await updateFixedItemFor(caller.userId, bill.id, {
+        name: bill.name,
+        category: isCategory(bill.category) ? bill.category : "Other",
+        amount: expense.amountCents,
+        dueDay: bill.dueDay,
+        month: input.month,
+        isEstimate: false,
+        matchKeywords: undefined,
+      });
+      target =
+        (await selectFixedItemInMonth(caller.userId, bill.id, input.month)) ??
+        bill;
+    }
+    await linkExpenseToBillRow(caller.userId, expense.id, target.id);
+    return {
+      summary: `Marked ${bill.name} paid for ${input.month} with "${expense.description}" (${money(expense.amountCents)}). The expense is now the bill's payment, so it counts once.${input.update_amount && expense.amountCents !== bill.amountCents ? ` The bill is now ${money(expense.amountCents)} from ${input.month} on.` : ""}`,
+      data: {
+        id: target.id,
+        name: bill.name,
+        month: input.month,
+        paid: true,
+        expense_id: expense.id,
+        amount: dollars(
+          input.update_amount ? expense.amountCents : bill.amountCents,
+        ),
+      },
+    };
+  }
+
+  await insertBillPayment(caller.userId, bill.id, input.month, {
+    paidOn: input.paid_on ?? null,
+    amountCents: input.paid_on ? bill.amountCents : null,
+  });
   return {
-    summary: `Marked ${bill.name} paid for ${input.month}.`,
-    data: { id: bill.id, name: bill.name, month: input.month, paid: true },
+    summary: `Marked ${bill.name} paid for ${input.month}.${input.paid_on ? ` It comes off the bank balance as paid on ${input.paid_on}.` : " Without paid_on it doesn't change the bank balance."}`,
+    data: {
+      id: bill.id,
+      name: bill.name,
+      month: input.month,
+      paid: true,
+      paid_on: input.paid_on ?? null,
+    },
+  };
+}
+
+export async function findMatchingFixedBill(
+  caller: McpCaller,
+  args: unknown,
+): Promise<ToolResult> {
+  const input = findMatchingFixedBillInputSchema.parse(args);
+  const month = monthOfDate(input.date);
+  const tolerance =
+    input.tolerance_percent === undefined
+      ? DEFAULT_AMOUNT_TOLERANCE
+      : input.tolerance_percent / 100;
+  const matches = matchBills(
+    await activeBills(caller.userId, month),
+    {
+      merchant: input.merchant,
+      description: input.description,
+      amountCents: toCents(input.amount),
+      date: input.date,
+    },
+    tolerance,
+  );
+  if (matches.length === 0) {
+    return {
+      summary: `No fixed bill in ${month} looks like this. If the email says it repeats (subscription, monthly plan, auto-renewal), ask the user whether to add it as a fixed bill (add_expense with is_subscription: true, or add_fixed_bill). Otherwise it's a normal expense (add_expense with is_subscription: false).`,
+      data: { month, matches: [] },
+    };
+  }
+  return {
+    summary: `${matches.length} possible fixed bill(s). Best: ${matches[0]?.suggestion}`,
+    data: { month, matches: matches.map(matchData) },
+  };
+}
+
+export async function convertExpenseToFixedBill(
+  caller: McpCaller,
+  args: unknown,
+): Promise<ToolResult> {
+  const input = convertExpenseToFixedBillInputSchema.parse(args);
+  if (input.pending_id) {
+    const item = await selectPendingExpense(caller.userId, input.pending_id);
+    if (!item) return notFound("pending item", "list_expenses");
+    await setPendingBill(caller.userId, item.id, {
+      isSubscription: true,
+      fixedItemId: null,
+    });
+    return {
+      summary: `Marked "${item.description}" as a subscription. When the user approves it on the Review page (${REVIEW_URL}), it becomes a fixed bill of ${money(item.amountCents)} a month, with this charge as its first paid month.`,
+      data: { pending_id: item.id, is_subscription: true },
+    };
+  }
+
+  const expense = await selectExpenseById(
+    caller.userId,
+    String(input.expense_id),
+  );
+  if (!expense) return notFound("expense", "list_expenses");
+  if (expense.fixedItemId) {
+    return {
+      summary:
+        "That expense is already a fixed bill's payment. Call list_fixed_bills to see it.",
+      data: { expense_id: expense.id, fixed_bill_id: expense.fixedItemId },
+      isError: true,
+    };
+  }
+  const category =
+    input.category ??
+    (isCategory(expense.category) ? expense.category : "Other");
+  const name = input.name ?? expense.description;
+  const billId = await insertFixedItem(caller.userId, {
+    name,
+    category,
+    amountCents: expense.amountCents,
+    dueDay: input.due_day ?? Number(expense.spentOn.slice(8, 10)),
+    startMonth: expense.month,
+    merchant: input.merchant || null,
+    matchKeywords: cleanKeywords(
+      input.match_keywords ?? [input.merchant ?? expense.description],
+    ),
+  });
+  await linkExpenseToBillRow(caller.userId, expense.id, billId);
+  return {
+    summary: `Made "${name}" a fixed bill of ${money(expense.amountCents)} a month from ${expense.month}, with this expense as its first paid month.`,
+    data: {
+      fixed_bill_id: billId,
+      name,
+      amount: dollars(expense.amountCents),
+      start_month: expense.month,
+      expense_id: expense.id,
+    },
+  };
+}
+
+export async function unlinkFixedBill(
+  caller: McpCaller,
+  args: unknown,
+): Promise<ToolResult> {
+  const input = unlinkFixedBillInputSchema.parse(args);
+  if (input.pending_id) {
+    const saved = await setPendingBill(caller.userId, input.pending_id, {
+      fixedItemId: null,
+      isSubscription: false,
+    });
+    if (!saved) return notFound("pending item", "list_expenses");
+    return {
+      summary:
+        "It's no longer linked to a fixed bill or marked a subscription. Approving it adds it as a normal expense.",
+      data: { pending_id: input.pending_id, is_subscription: false },
+    };
+  }
+  const expense = await selectExpenseById(
+    caller.userId,
+    String(input.expense_id),
+  );
+  if (!expense) return notFound("expense", "list_expenses");
+  if (!(await unlinkExpenseFromBillRow(caller.userId, expense.id))) {
+    return {
+      summary:
+        "That expense wasn't linked to a fixed bill, so nothing changed.",
+      data: { expense_id: expense.id },
+    };
+  }
+  return {
+    summary: `"${expense.description}" is a normal expense again, and the bill's month it paid is no longer marked paid by it.`,
+    data: { expense_id: expense.id, fixed_bill_id: null },
   };
 }

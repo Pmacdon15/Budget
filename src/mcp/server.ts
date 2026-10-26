@@ -5,23 +5,28 @@ import {
   addExpenseInputSchema,
   addFixedBillInputSchema,
   attachReceiptInputSchema,
+  convertExpenseToFixedBillInputSchema,
   deleteExpenseInputSchema,
   editExpenseInputSchema,
   editFixedBillInputSchema,
+  findMatchingFixedBillInputSchema,
   listExpensesInputSchema,
   listFixedBillsInputSchema,
   markBillPaidInputSchema,
   markExpensePaidInputSchema,
   syncBankBalanceInputSchema,
+  unlinkFixedBillInputSchema,
 } from "@/lib/pending-expenses";
 import { MCP_INSTRUCTIONS } from "@/mcp/instructions";
 import {
   addExpense,
   addFixedBill,
   attachReceipt,
+  convertExpenseToFixedBill,
   deleteExpense,
   editExpense,
   editFixedBill,
+  findMatchingFixedBill,
   listCategories,
   listExpenses,
   listFixedBills,
@@ -30,6 +35,7 @@ import {
   markExpensePaid,
   syncBankBalance,
   type ToolResult,
+  unlinkFixedBill,
 } from "@/mcp/tools";
 
 /*
@@ -138,7 +144,7 @@ export function registerBudgetTools(server: McpServer) {
     {
       title: "Add expense for review",
       description:
-        "Submits a charge you found (e.g. in an email) to the user's Pending Review list. It does not become an expense until the user approves it in Budget. Before calling, tell the user the merchant, amount and date and the category you suggest, and wait for them to confirm the category. If the answer is status 'possible_duplicate', nothing was saved: ask the user, and only resubmit with allow_duplicate: true if they say it's a separate charge.",
+        "Submits a charge you found (e.g. in an email) to the user's Pending Review list. It does not become an expense until the user approves it in Budget. Before calling, tell the user the merchant, amount and date and the category you suggest, and wait for them to confirm the category. If the answer is status 'possible_duplicate', nothing was saved: ask the user, and only resubmit with allow_duplicate: true if they say it's a separate charge. It also checks the user's fixed bills: status 'matches_fixed_bill' means nothing was saved and the charge looks like one of them; show the user the suggestion, then resubmit with fixed_bill_id (it's that bill) or is_subscription: false (a separate charge). Set is_subscription: true for a subscription with no fixed bill yet, so approving it creates one.",
       inputSchema: addExpenseInputSchema,
       annotations: {
         readOnlyHint: false,
@@ -299,7 +305,7 @@ export function registerBudgetTools(server: McpServer) {
     {
       title: "Mark a fixed bill paid",
       description:
-        "Ticks a fixed bill as paid for a month, when you find its payment confirmation. It's bookkeeping only: the bill counts toward the month either way, and it doesn't change the bank balance.",
+        "Marks a fixed bill paid for a month, when you find its payment. Pass paid_on (the day the money left) so it comes off the bank balance like an expense. To merge a saved expense that is this bill's payment, pass expense_id: the expense is linked to the bill and counts once (with update_amount: true the bill also takes that expense's amount, once the user agreed). The bill counts toward the month either way.",
       inputSchema: markBillPaidInputSchema,
       annotations: {
         readOnlyHint: false,
@@ -310,5 +316,60 @@ export function registerBudgetTools(server: McpServer) {
     },
     (args, ctx) =>
       run(server, ctx.http?.authInfo, (caller) => markBillPaid(caller, args)),
+  );
+
+  server.registerTool(
+    "find_matching_fixed_bill",
+    {
+      title: "Find the fixed bill a charge matches",
+      description:
+        "Given a charge (merchant, description, amount, date), returns the user's fixed bills it could be, with a score, the amount difference and a suggestion to show the user (e.g. 'Update fixed bill Internet from $80.00 to $85.00 and mark 2026-10 paid?'). Matches on merchant name, then amount (within 15% by default) and billing day. Call it before add_expense or add_fixed_bill for anything that might repeat. Changes nothing.",
+      inputSchema: findMatchingFixedBillInputSchema,
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    (args, ctx) =>
+      run(server, ctx.http?.authInfo, (caller) =>
+        findMatchingFixedBill(caller, args),
+      ),
+  );
+
+  server.registerTool(
+    "convert_expense_to_fixed_bill",
+    {
+      title: "Turn an expense into a fixed bill",
+      description:
+        "Makes a saved expense (expense_id) a fixed bill from its month, with that expense linked as the first paid month, so it counts once. For an item waiting for review (pending_id), marks it a subscription: approving it creates the bill. Only after the user said it's a subscription.",
+      inputSchema: convertExpenseToFixedBillInputSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    (args, ctx) =>
+      run(server, ctx.http?.authInfo, (caller) =>
+        convertExpenseToFixedBill(caller, args),
+      ),
+  );
+
+  server.registerTool(
+    "unlink_fixed_bill",
+    {
+      title: "Make a charge a normal expense again",
+      description:
+        "The reverse of linking or converting: a saved expense (expense_id) stops being a fixed bill's payment and counts as normal spending, or an item waiting for review (pending_id) is no longer linked to a bill or marked a subscription. Use it when the user says a charge isn't the subscription (e.g. usage credits). It doesn't delete the bill.",
+      inputSchema: unlinkFixedBillInputSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    (args, ctx) =>
+      run(server, ctx.http?.authInfo, (caller) =>
+        unlinkFixedBill(caller, args),
+      ),
   );
 }

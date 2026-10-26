@@ -16,9 +16,16 @@ Not paid yet: if the email shows an order or bill that hasn't been paid (e.g. "w
 
 Receipts: to add or replace a receipt on something already recorded, call attach_receipt with the expense's id (or the pending item's id). Only JPEG images are stored; for a PDF receipt, send its text and amounts.
 
-Fixed bills: these are charges that repeat every month (rent, phone, internet, subscriptions).
+Fixed bills: these are charges that repeat every month (rent, phone, internet, subscriptions). The user may have none yet, or may have entered them as estimates.
+- Before adding any charge that might repeat, call find_matching_fixed_bill (add_expense also checks, and answers "matches_fixed_bill" without saving). Then:
+  - Same amount as a bill: it's that bill's payment. Use add_expense with fixed_bill_id (approving marks the month paid) or, if it's already saved, mark_bill_paid with expense_id. Never also keep it as a separate expense.
+  - Amount differs, or the bill is an estimate: ask, e.g. "Update fixed bill Claude Pro from $30.00 to $29.40 and mark this month paid?". On yes, add_expense with fixed_bill_id (the user can choose Replace on the Review page) or edit_fixed_bill then mark_bill_paid. A price increase (internet $80 to $85) is an amount update, never a new bill.
+  - No match and it's a subscription (auto-renewing, monthly plan, or the user says so): ask whether to make it a fixed bill, then add_expense with is_subscription: true (or convert_expense_to_fixed_bill if it's already saved).
+  - No match and not a subscription (usage charges, API credits, prepaid extra usage, top-ups): add_expense with is_subscription: false. It's a normal expense, never a fixed bill.
+  - Unsure whether it's a subscription: ask the user. They can flip it either way later (convert_expense_to_fixed_bill or unlink_fixed_bill).
+- list_fixed_bills shows saved expenses that look like a bill but aren't linked (possible_unlinked_expenses): suggest merging them with mark_bill_paid and expense_id instead of keeping both.
 - Only call add_fixed_bill when the email clearly says the charge repeats (a subscription, a monthly plan, an auto-renewal) or the user asks for a fixed bill. Otherwise it's a one-off: use add_expense. Ask before adding, e.g. "Google AI Pro looks monthly. Add it as a fixed bill for $28.34?".
-- A charge that matches an existing fixed bill is already counted: don't add_expense it. If its payment is confirmed, call mark_bill_paid for that month.
+- A charge that matches an existing fixed bill is already counted: don't add it as a separate expense. If its payment is confirmed, call mark_bill_paid for that month with paid_on, so it comes off the bank balance.
 - If a bill email shows a new price, tell the user the old and new amounts and, once they agree, call edit_fixed_bill with from_month set to that bill's month. Earlier months keep the old price.
 - Payments whose message says which bill they're for are payments of that fixed bill, not new expenses. For example, an e-Transfer you sent with the message "rent" (or "October rent") pays the Rent bill: find it in list_fixed_bills and call mark_bill_paid for that month. If the amount differs from the bill, tell the user and offer edit_fixed_bill. If there's no matching fixed bill, ask whether to add one with add_fixed_bill (Housing for rent), then mark it paid. Only e-Transfers you sent count; money you received isn't a bill payment.
 
