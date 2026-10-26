@@ -29,7 +29,8 @@ export async function selectMatchingExpenses(
   const pattern = filters.text ? likePattern(filters.text) : null;
   const rows = await db()`
     select e.id, e.month, e.spent_on, e.description, e.category,
-           e.amount_cents, e.receipt_id
+           e.amount_cents, e.receipt_id, e.unpaid,
+           (r.image_pathname is not null) as receipt_has_photo
     from expenses e
     left join receipts r on r.id = e.receipt_id and r.user_id = e.user_id
     where e.user_id = ${userId}

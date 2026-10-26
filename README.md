@@ -8,9 +8,9 @@ A personal monthly budgeting app — live at **[budget.patmac.ca](https://budget
   - **Scan receipt** — take a photo with the camera or pick one, from the Spending page or inside any Add expense form; AI reads the store, date, total, tax and category and pre-fills the expense for you to confirm. A receipt with things from several categories (groceries and beer, say) is split into one expense per category; the AI suggests the split and you can adjust it. Any new expense can be split by hand too. The photo and everything read off it are saved with the expense (📎 opens it).
   - **Download** — expenses as **CSV**, **Excel** or **PDF** for any month range, with checkboxes to choose the categories. PDFs can include the receipt photos.
 - **Overview** — this month at a glance: take-home, bills, spending, what's left, a 12-month history chart and a category breakdown.
-- **Bank balance** — enter what your account shows (negative is fine when overdrawn). Every expense you add after that comes off it, so the card shows what's left in the bank, with a line like "Entered $1,000.00, less $40.00 spent since". Editing, deleting or undoing an expense keeps it right, because the debit is worked out from the expenses that exist now. Expenses added before you entered the balance are already in your bank's number, so entering a new balance starts fresh and nothing is taken off twice.
+- **Bank balance** — enter what your account shows (negative is fine when overdrawn), or let your AI set it from a bank alert. Expenses dated on or after that day, added after the balance, come off it, so the card shows what's left in the bank, with a line like "Entered $1,000.00, less $40.00 spent since". Anything dated earlier is already in your bank's number, so it never comes off, even if you add it or approve it from Review afterwards. Editing, deleting or undoing an expense keeps it right, because the debit is worked out from the expenses that exist now, and entering a new balance starts fresh.
 - **Monthly report** — summary vs. last month and your 12-month average, category breakdown, every line item, plus **Print / PDF** and **CSV** export.
-- **AI connector** — an [MCP](https://modelcontextprotocol.io) server at `https://budget.patmac.ca/api/mcp` that Claude, Muse, Gemini or any MCP-capable assistant can connect to. Ask it to go through your email, and it suggests a category for each bill, receipt or order and checks with you, then sends it to **Review**. Nothing counts until you approve it there, where you can also edit or reject it. It can also set your bank balance from a bank alert, and edit or delete an expense when you explicitly ask. See [docs/mcp-ai-guide.md](docs/mcp-ai-guide.md) for how to connect and the rules the assistant follows.
+- **AI connector** — an [MCP](https://modelcontextprotocol.io) server at `https://budget.patmac.ca/api/mcp` that Claude, Muse, Gemini or any MCP-capable assistant can connect to. Ask it to go through your email, and it suggests a category for each bill, receipt or order and checks with you, then sends it to **Review**. Nothing counts until you approve it there, where you can also edit or reject it. It can attach the receipt from the email, keep an unpaid order off your bank balance until it sees the payment, add fixed bills for clear subscriptions, update a bill's price from the month it changed, tick bills paid (an e-Transfer you sent with the message "rent" ticks off your Rent bill), set your bank balance from a bank alert, and edit or delete an expense when you explicitly ask. See [docs/mcp-ai-guide.md](docs/mcp-ai-guide.md) for how to connect and the rules the assistant follows.
 
 ## Stack
 
@@ -50,16 +50,21 @@ Required environment variables (Vercel sets these when the Clerk and Neon integr
 
 ### AI connector (MCP)
 
-The MCP endpoint is `src/app/api/mcp/route.ts` (Streamable HTTP, stateless, using [`mcp-handler`](https://www.npmjs.com/package/mcp-handler)). AI apps sign in with **OAuth through Clerk**: an unauthenticated request gets a `401` pointing to `/.well-known/oauth-protected-resource`, which names this app's Clerk instance as the authorization server, and the app sends the user there to sign in. No new environment variables are needed, but in the **Clerk dashboard** turn on **Dynamic client registration** in its OAuth applications settings, so AI apps can register themselves.
+The MCP endpoint is `src/app/api/mcp/route.ts` (Streamable HTTP, stateless, using [`mcp-handler`](https://www.npmjs.com/package/mcp-handler)). AI apps sign in with **OAuth through Clerk**: an unauthenticated request gets a `401` pointing to `/.well-known/oauth-protected-resource`, which names this app's Clerk instance as the authorization server, and the app sends the user there to sign in. No new environment variables are needed. In the **Clerk dashboard**'s OAuth settings, turn on **Publish CIMD support**, so AI apps that support Client ID Metadata Documents (the current MCP standard) can connect with just the URL. Turn on **Publish DCR support** too for apps that only know the older dynamic client registration. With neither, each AI app needs an OAuth application created for it in Clerk.
 
 For apps that can't do OAuth, users create a **personal API key** (`bgt_…`) on the Review page. Only a SHA-256 hash is stored; the key is shown once and can be revoked.
 
 | Tool | Does |
 | --- | --- |
-| `list_categories`, `list_expenses` | Read-only helpers for suggesting a category and spotting duplicates |
-| `add_expense` | Sends a charge to **Review** (`pending_expenses`). A saved expense or pending item with the same amount on the same day comes back as `possible_duplicate` unless `allow_duplicate` is set |
+| `list_categories`, `list_expenses`, `list_fixed_bills` | Read-only helpers for suggesting a category and spotting duplicates and existing bills |
+| `add_expense` | Sends a charge to **Review** (`pending_expenses`), optionally `unpaid` and with a `receipt`. A saved expense or pending item with the same amount on the same day comes back as `possible_duplicate` unless `allow_duplicate` is set |
+| `mark_expense_paid` | Marks an unpaid expense (saved or pending) paid on a day, so it starts coming off the bank balance |
+| `attach_receipt` | Adds or replaces a receipt (details plus an optional JPEG) on an expense or pending item |
 | `sync_bank_balance` | Sets the bank balance to what the bank reported; never subtracts |
-| `edit_expense`, `delete_expense` | Marked destructive; only for when the user explicitly asks |
+| `add_fixed_bill`, `mark_bill_paid` | Adds a monthly bill (only for charges that clearly repeat, or when asked); ticks a bill paid for a month |
+| `edit_fixed_bill`, `edit_expense`, `delete_expense` | Marked destructive; only when the user explicitly asks or agrees. A bill edit applies from a month on |
+
+Unpaid expenses (`expenses.unpaid`) count as spending but stay off the bank balance until marked paid, then count by when they were paid (`paid_at`, `paid_on`). Receipts read off emails are stored like scanned ones; one without a photo has `image_pathname` null, and its 📎 on Spending isn't a link.
 
 The instructions every client receives on connect live in `src/mcp/instructions.ts`; keep them in step with `docs/mcp-ai-guide.md`.
 

@@ -209,7 +209,21 @@ async function Expenses({
                           <span className="font-medium">
                             {expense.description}
                           </span>
-                          {expense.receiptId ? (
+                          {expense.unpaid ? (
+                            <Badge variant="outline">Not paid yet</Badge>
+                          ) : null}
+                          {expense.receiptId &&
+                          expense.receiptHasPhoto === false ? (
+                            <span
+                              className="text-muted-foreground"
+                              title="Receipt details saved (no photo)"
+                            >
+                              <Paperclip
+                                className="size-3.5"
+                                aria-label="Receipt details saved, no photo"
+                              />
+                            </span>
+                          ) : expense.receiptId ? (
                             <a
                               href={`/api/receipts/${expense.receiptId}/image`}
                               target="_blank"

@@ -120,15 +120,21 @@ describe("MCP endpoint with an API key", () => {
     expect(res.body.result.instructions).toContain("Pending Review");
   });
 
-  it("lists the six tools", async () => {
+  it("lists every tool", async () => {
     const res = await rpc(await newKey(), "tools/list");
     const names = res.body.result.tools.map((t: { name: string }) => t.name);
     expect(names.sort()).toEqual([
       "add_expense",
+      "add_fixed_bill",
+      "attach_receipt",
       "delete_expense",
       "edit_expense",
+      "edit_fixed_bill",
       "list_categories",
       "list_expenses",
+      "list_fixed_bills",
+      "mark_bill_paid",
+      "mark_expense_paid",
       "sync_bank_balance",
     ]);
   });

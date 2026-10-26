@@ -85,4 +85,29 @@ describe("Review page", () => {
     expect(text).toContain("https://budget.patmac.ca/api/mcp");
     expect(text).not.toContain("$45.67");
   });
+
+  it("flags items that aren't paid yet or carry a receipt", async () => {
+    await insertPendingExpense("user_a", {
+      spentOn: "2026-10-25",
+      description: "Natures Garden",
+      merchant: "Natures Garden",
+      category: "Personal",
+      amountCents: 25_000,
+      source: null,
+      client: "Claude",
+      unpaid: true,
+      receipt: {
+        merchant: "Natures Garden",
+        purchasedOn: "2026-10-25",
+        subtotalCents: null,
+        taxCents: null,
+        totalCents: 25_000,
+        rawText: null,
+        imagePathname: null,
+      },
+    });
+    const text = await render();
+    expect(text).toContain("Not paid yet");
+    expect(text).toContain("Receipt attached");
+  });
 });
