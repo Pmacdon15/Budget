@@ -74,6 +74,37 @@ describe("GET /report/csv", () => {
     ]);
   });
 
+  it("defuses formulas in names but keeps negative amounts as numbers", async () => {
+    await insertIncome("user_a", {
+      month: "2026-10",
+      label: "+cmd|' /C calc'!A0",
+      amountCents: 1_000,
+      receivedOn: "2026-10-01",
+    });
+    await insertFixedItem("user_a", {
+      name: "@SUM(1+1)",
+      category: "Housing",
+      amountCents: 1_500,
+      dueDay: 2,
+      startMonth: "2026-01",
+    });
+    await insertExpense("user_a", {
+      month: "2026-10",
+      spentOn: "2026-10-03",
+      description: '=HYPERLINK("http://example.com")',
+      category: "Dining",
+      amountCents: 1_500,
+    });
+
+    const lines = (await (await get("?month=2026-10")).text()).split("\n");
+    expect(lines.slice(1, 4)).toEqual([
+      "take-home,2026-10-01,'+cmd|' /C calc'!A0,,10.00",
+      "fixed,2026-10-02,'@SUM(1+1),Rent & Home,-15.00",
+      `spending,2026-10-03,"'=HYPERLINK(""http://example.com"")",Meals & Dining,-15.00`,
+    ]);
+    expect(lines.at(-1)).toBe("summary,2026-10,Left over,,-20.00");
+  });
+
   it("defaults to the current month and handles an empty month", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-23T18:00:00Z"));

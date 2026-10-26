@@ -1,11 +1,11 @@
 import { PDFDocument } from "pdf-lib";
 import { describe, expect, it, vi } from "vitest";
 import { CATEGORY_NAMES } from "@/lib/categories";
+import { csvCell, toCsv } from "@/lib/exports/csv";
 import {
   buildExpenseExport,
   buildPdf,
   categoryLabel,
-  csvCell,
   exportFilename,
   pdfText,
   rangeLabel,
@@ -87,6 +87,17 @@ describe("csvCell", () => {
     expect(csvCell("@cmd")).toBe("'@cmd");
     // Numbers are ours, not user text, so a minus sign stays a minus sign.
     expect(csvCell(-5)).toBe("-5");
+    // Formatted amounts are plain decimals, not formulas.
+    expect(csvCell("-15.00")).toBe("-15.00");
+    expect(csvCell("-1+1")).toBe("'-1+1");
+    expect(csvCell("-15.00 refund")).toBe("'-15.00 refund");
+    expect(csvCell('=HYPERLINK("http://example.com")')).toBe(
+      '"\'=HYPERLINK(""http://example.com"")"',
+    );
+  });
+
+  it("joins rows", () => {
+    expect(toCsv([["a", "-1.50"], [], ["=1", 2]])).toBe("a,-1.50\n\n'=1,2");
   });
 });
 
