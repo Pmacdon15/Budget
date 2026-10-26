@@ -7,6 +7,11 @@ const isPublicRoute = createRouteMatcher([
   "/welcome",
   // Vercel Cron jobs. Each route checks CRON_SECRET itself.
   "/api/cron/(.*)",
+  // The MCP server checks its own OAuth token or API key, and answers 401
+  // with a sign-in hint instead of a redirect, which MCP clients need.
+  "/api/mcp",
+  // OAuth discovery documents for MCP clients. Public by definition.
+  "/.well-known/(.*)",
 ]);
 const isHome = createRouteMatcher(["/"]);
 
