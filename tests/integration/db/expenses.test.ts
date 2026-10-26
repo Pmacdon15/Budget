@@ -22,6 +22,8 @@ describe("db/expenses", () => {
       id: expect.any(String),
       ...values,
       receiptId: null,
+      receiptHasPhoto: false,
+      unpaid: false,
     });
   });
 

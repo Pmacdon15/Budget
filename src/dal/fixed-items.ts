@@ -40,7 +40,19 @@ export async function createFixedItem(input: FixedItemInput) {
  * reports) keep the amounts that were true at the time.
  */
 export async function updateFixedItem(id: string, input: FixedItemInput) {
-  const userId = await currentUserIdOrThrow();
+  await updateFixedItemFor(await currentUserIdOrThrow(), id, input);
+}
+
+/**
+ * The same rule for a caller verified some other way (the MCP server's
+ * token): the change applies from `input.month` onward. `userId` must come
+ * from that verification, never from the request.
+ */
+export async function updateFixedItemFor(
+  userId: string,
+  id: string,
+  input: FixedItemInput,
+) {
   const item = await selectFixedItem(userId, id);
   if (!item) throw new NotFoundError();
 

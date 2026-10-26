@@ -15,6 +15,7 @@ import { claimReceiptScan } from "@/dal/receipt-scans";
 import { readReceiptSafely } from "@/lib/receipt-ai";
 import {
   IMAGE_CONTENT_TYPE,
+  isJpeg,
   MAX_IMAGE_BYTES,
   newReceiptImagePathname,
 } from "@/lib/receipt-image";
@@ -22,12 +23,6 @@ import { putReceiptImage } from "@/lib/receipt-store";
 
 const error = (message: string, status: number) =>
   Response.json({ error: message }, { status });
-
-const isJpeg = (bytes: Uint8Array) =>
-  bytes.length > 3 &&
-  bytes[0] === 0xff &&
-  bytes[1] === 0xd8 &&
-  bytes[2] === 0xff;
 
 export async function POST(request: Request) {
   const { userId } = await auth();

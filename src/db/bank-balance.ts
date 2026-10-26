@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/db/client";
 import type { BankBalance } from "@/lib/bank-balance";
+import { TIME_ZONE } from "@/lib/month";
 
 /** Raw SQL for the bank balance. Callers (the DAL) handle auth. */
 
@@ -11,13 +12,19 @@ function toIso(value: unknown) {
 }
 
 /**
- * The balance the user last entered, less every expense added after it.
+ * The balance the user last entered, less the expenses that came after it.
+ *
+ * An expense comes off when it was added after the balance was set *and* it is
+ * dated on or after the day the balance was set (in the app's time zone). An
+ * unpaid expense (an order waiting on a bank transfer) stays off until it is
+ * marked paid, and then counts by when it was paid instead.
+ * Anything dated earlier is already in the number the bank showed, so it
+ * never comes off twice, even when it is added (or approved from Review)
+ * after the balance was entered or synced from a bank alert.
  *
  * The debit is worked out on read instead of being written into the row, so
- * editing, deleting or undoing an expense can never leave it wrong: whatever
- * expenses exist now, and were added after the balance, are what come off.
- * Expenses added before it are already in the number the bank showed, so
- * entering a new balance starts fresh and nothing is taken off twice.
+ * editing, deleting or undoing an expense can never leave it wrong, and
+ * entering a new balance starts fresh.
  */
 export async function selectBankBalance(
   userId: string,
@@ -26,7 +33,13 @@ export async function selectBankBalance(
     select b.balance_cents, b.updated_at,
            coalesce((
              select sum(e.amount_cents) from expenses e
-             where e.user_id = b.user_id and e.created_at > b.updated_at
+             where e.user_id = b.user_id
+               -- Not paid yet: it hasn't left the bank.
+               and not e.unpaid
+               -- Paid later than it was spent: what matters is when it was paid.
+               and coalesce(e.paid_at, e.created_at) > b.updated_at
+               and coalesce(e.paid_on, e.spent_on)
+                   >= (b.updated_at at time zone ${TIME_ZONE}::text)::date
            ), 0) as spent_since_cents
     from bank_balances b
     where b.user_id = ${userId}

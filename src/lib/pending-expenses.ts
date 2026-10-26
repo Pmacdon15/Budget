@@ -23,6 +23,22 @@ export type PendingExpense = {
   createdAt: string;
   /** A saved expense on the same day has the same amount. */
   possibleDuplicate: boolean;
+  /** Not paid yet: once approved, it stays off the bank balance until marked paid. */
+  unpaid: boolean;
+  /** The AI attached a receipt (details read off an email, maybe a photo). */
+  hasReceipt: boolean;
+};
+
+/** What an AI read off an emailed receipt, kept with the expense like a scan. */
+export type ReceiptDetails = {
+  merchant: string | null;
+  purchasedOn: string | null;
+  subtotalCents: number | null;
+  taxCents: number | null;
+  totalCents: number | null;
+  rawText: string | null;
+  /** A JPEG photo of the receipt in the private store, when the email had one. */
+  imagePathname: string | null;
 };
 
 /** An expense or pending item that looks like a new one: same day, same amount. */
@@ -68,6 +84,49 @@ const label = (name: string) =>
 /** Dollars (as the AI sends them) to integer cents. */
 export const toCents = (amount: number) => Math.round(amount * 100);
 
+const yearMonth = z
+  .string()
+  .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Use the month as YYYY-MM");
+
+const nonNegativeDollars = z
+  .number()
+  .min(0, "Amounts can't be negative")
+  .max(MAX_AMOUNT, "That amount is too large")
+  .refine(
+    (value) => Math.abs(Math.round(value * 100) - value * 100) < 1e-6,
+    "Use at most two decimal places",
+  );
+
+/** About 3MB once decoded, the same limit as a scanned photo. */
+const MAX_IMAGE_BASE64 = 4_200_000;
+
+/** A receipt read off an email: what it says, and optionally a JPEG of it. */
+export const receiptInputSchema = z.object({
+  merchant: z.string().trim().max(120).optional(),
+  purchased_on: isoDate
+    .optional()
+    .describe("The date on the receipt, YYYY-MM-DD."),
+  subtotal: nonNegativeDollars.optional().describe("Before tax, in dollars."),
+  tax: nonNegativeDollars.optional().describe("Tax, in dollars."),
+  total: nonNegativeDollars.optional().describe("Total, in dollars."),
+  text: z
+    .string()
+    .max(4000, "Keep the receipt text under 4,000 characters")
+    .optional()
+    .describe(
+      "The receipt's text, e.g. the line items from the email or its PDF.",
+    ),
+  image_jpeg_base64: z
+    .string()
+    .max(MAX_IMAGE_BASE64, "That image is too large (3MB at most)")
+    .optional()
+    .describe(
+      "A JPEG photo or scan of the receipt, base64-encoded. JPEG only; for a PDF receipt send its text instead.",
+    ),
+});
+
+export type ReceiptInput = z.output<typeof receiptInputSchema>;
+
 /** What `add_expense` takes. Amounts are dollars, e.g. 45.67. */
 export const addExpenseInputSchema = z.object({
   amount: dollars.describe(
@@ -98,6 +157,17 @@ export const addExpenseInputSchema = z.object({
     .optional()
     .describe(
       "Only set true after the user said a flagged possible duplicate is a separate charge.",
+    ),
+  unpaid: z
+    .boolean()
+    .optional()
+    .describe(
+      "True when it hasn't been paid yet (e.g. an order waiting on a bank transfer). It stays off the bank balance until mark_expense_paid.",
+    ),
+  receipt: receiptInputSchema
+    .optional()
+    .describe(
+      "The receipt, when the email is one: its details and optionally a JPEG.",
     ),
 });
 
@@ -140,6 +210,81 @@ export const listExpensesInputSchema = z.object({
   to: isoDate
     .optional()
     .describe("Last day to include, as YYYY-MM-DD. Defaults to today."),
+});
+
+/** What `attach_receipt` takes: a saved expense or a pending item, and the receipt. */
+export const attachReceiptInputSchema = receiptInputSchema
+  .extend({
+    expense_id: z
+      .uuid()
+      .optional()
+      .describe("A saved expense's id, from list_expenses."),
+    pending_id: z
+      .uuid()
+      .optional()
+      .describe(
+        "An id from list_expenses' pending_review, or from add_expense.",
+      ),
+  })
+  .refine(
+    (value) => Boolean(value.expense_id) !== Boolean(value.pending_id),
+    "Give exactly one of expense_id or pending_id",
+  );
+
+export const markExpensePaidInputSchema = z.object({
+  id: z
+    .uuid()
+    .describe(
+      "The unpaid expense's id, or a pending item's id, from list_expenses.",
+    ),
+  paid_on: isoDate.describe("The day the payment went out, YYYY-MM-DD."),
+});
+
+export const listFixedBillsInputSchema = z.object({
+  month: yearMonth
+    .optional()
+    .describe("Which month's bills, as YYYY-MM. Defaults to this month."),
+});
+
+const dueDay = z
+  .number()
+  .int("The due day must be a whole number")
+  .min(1, "The due day must be between 1 and 31")
+  .max(31, "The due day must be between 1 and 31");
+
+export const addFixedBillInputSchema = z.object({
+  name: label("Name").describe("e.g. 'Internet' or 'Google AI Pro'."),
+  category: z
+    .enum(CATEGORY_NAMES)
+    .describe(
+      "The category the user confirmed. Call list_categories for the options.",
+    ),
+  amount: dollars.describe("The monthly amount, in dollars, tax included."),
+  due_day: dueDay.optional().describe("Day of the month it's charged, 1-31."),
+  start_month: yearMonth
+    .optional()
+    .describe(
+      "The first month it applies to, YYYY-MM. Defaults to this month.",
+    ),
+});
+
+export const editFixedBillInputSchema = z.object({
+  id: z.uuid().describe("The bill's id, from list_fixed_bills."),
+  from_month: yearMonth.describe(
+    "The first month the change applies to, YYYY-MM: usually the month of the bill that showed the new price. Earlier months keep the old values.",
+  ),
+  amount: dollars.optional().describe("New monthly amount, in dollars."),
+  name: label("Name").optional(),
+  category: z.enum(CATEGORY_NAMES).optional(),
+  due_day: dueDay
+    .nullable()
+    .optional()
+    .describe("New due day, or null for none."),
+});
+
+export const markBillPaidInputSchema = z.object({
+  id: z.uuid().describe("The bill's id, from list_fixed_bills."),
+  month: yearMonth.describe("The month that was paid, YYYY-MM."),
 });
 
 /** "Possible duplicate: Shell, $45.67 on 2026-10-20 (already saved)". */

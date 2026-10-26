@@ -7,10 +7,16 @@ import { callerFrom, registerBudgetTools, SERVER_OPTIONS } from "@/mcp/server";
 // The tools' database work is covered by tests/integration/mcp.
 vi.mock("@/mcp/tools", () => ({
   addExpense: vi.fn(),
+  addFixedBill: vi.fn(),
+  attachReceipt: vi.fn(),
   deleteExpense: vi.fn(),
   editExpense: vi.fn(),
+  editFixedBill: vi.fn(),
   listCategories: vi.fn(),
   listExpenses: vi.fn(),
+  listFixedBills: vi.fn(),
+  markBillPaid: vi.fn(),
+  markExpensePaid: vi.fn(),
   syncBankBalance: vi.fn(),
 }));
 
@@ -41,10 +47,16 @@ describe("Budget MCP server", () => {
   it("exposes exactly the tools in the spec", () => {
     expect([...tools.keys()].sort()).toEqual([
       "add_expense",
+      "add_fixed_bill",
+      "attach_receipt",
       "delete_expense",
       "edit_expense",
+      "edit_fixed_bill",
       "list_categories",
       "list_expenses",
+      "list_fixed_bills",
+      "mark_bill_paid",
+      "mark_expense_paid",
       "sync_bank_balance",
     ]);
   });
@@ -56,7 +68,11 @@ describe("Budget MCP server", () => {
   });
 
   it("marks the read helpers read-only", () => {
-    for (const name of ["list_categories", "list_expenses"]) {
+    for (const name of [
+      "list_categories",
+      "list_expenses",
+      "list_fixed_bills",
+    ]) {
       expect(tools.get(name)?.annotations?.readOnlyHint, name).toBe(true);
     }
   });
@@ -68,8 +84,28 @@ describe("Budget MCP server", () => {
     }
   });
 
-  it("doesn't mark adding or syncing as destructive", () => {
-    for (const name of ["add_expense", "sync_bank_balance"]) {
+  it("marks a fixed bill edit as destructive, needing the user's OK", () => {
+    expect(tools.get("edit_fixed_bill")?.annotations?.destructiveHint).toBe(
+      true,
+    );
+    expect(tools.get("edit_fixed_bill")?.description).toMatch(/get their OK/);
+  });
+
+  it("only adds a fixed bill for a charge that clearly repeats, or when asked", () => {
+    expect(tools.get("add_fixed_bill")?.description).toMatch(
+      /clearly says the charge repeats.*or the user asks/,
+    );
+  });
+
+  it("doesn't mark adding, syncing or marking paid as destructive", () => {
+    for (const name of [
+      "add_expense",
+      "sync_bank_balance",
+      "mark_expense_paid",
+      "mark_bill_paid",
+      "attach_receipt",
+      "add_fixed_bill",
+    ]) {
       expect(tools.get(name)?.annotations?.readOnlyHint, name).toBe(false);
       expect(tools.get(name)?.annotations?.destructiveHint, name).toBe(false);
     }
@@ -102,6 +138,24 @@ describe("server instructions", () => {
     ["not double-count bank alerts", /Never also call add_expense/],
     ["only edit or delete when asked", /explicitly asks/],
     ["never invent amounts", /Never guess or invent/],
+    ["keep unpaid orders off the balance", /unpaid: true/],
+    ["mark an unpaid expense paid when it's paid", /mark_expense_paid/],
+    [
+      "only add fixed bills for clear repeats",
+      /clearly says the charge repeats/,
+    ],
+    [
+      "not add an expense for an existing fixed bill",
+      /already counted: don't add_expense/,
+    ],
+    ["change a bill's price from that month on", /from_month/],
+    ["send a PDF receipt's text", /for a PDF receipt, send its text/],
+    ["read email with its own tools", /Budget never reads email itself/],
+    [
+      "treat an e-Transfer marked rent as paying the Rent bill",
+      /message "rent".*mark_bill_paid/,
+    ],
+    ["only count e-Transfers the user sent", /Only e-Transfers you sent count/],
   ])("tell the AI to %s", (_rule, pattern) => {
     expect(MCP_INSTRUCTIONS).toMatch(pattern);
   });

@@ -30,6 +30,8 @@ const item: PendingExpense = {
   client: "Claude",
   createdAt: "2026-10-25T20:00:00.000Z",
   possibleDuplicate: false,
+  unpaid: false,
+  hasReceipt: false,
 };
 
 beforeEach(() => {
