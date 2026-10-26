@@ -5,6 +5,7 @@ import {
   approvePendingExpense,
   editPendingExpense,
   rejectPendingExpense,
+  setPendingSubscription,
 } from "@/actions/pending-expenses";
 import type { ExpenseFormValues } from "@/lib/schemas";
 import { type ActionError, unwrap } from "@/mutations/action-error";
@@ -27,5 +28,23 @@ export function useRejectPendingExpense() {
   return useMutation<void, ActionError, string>({
     mutationKey: ["pending-expenses", "reject"],
     mutationFn: async (id) => unwrap(await rejectPendingExpense(id)),
+  });
+}
+
+/** Approves an item and replaces its fixed bill's amount with this charge. */
+export function useReplaceBillAndApprove() {
+  return useMutation<void, ActionError, string>({
+    mutationKey: ["pending-expenses", "replace"],
+    mutationFn: async (id) =>
+      unwrap(await approvePendingExpense(id, { replace: true })),
+  });
+}
+
+/** Marks an item a subscription (fixed bill) or a normal expense. */
+export function useSetPendingSubscription() {
+  return useMutation<void, ActionError, { id: string; subscription: boolean }>({
+    mutationKey: ["pending-expenses", "subscription"],
+    mutationFn: async ({ id, subscription }) =>
+      unwrap(await setPendingSubscription(id, subscription)),
   });
 }

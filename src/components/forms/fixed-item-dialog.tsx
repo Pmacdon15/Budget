@@ -77,6 +77,30 @@ export function FixedItemDialog({
         />
         <FieldError name="category" />
       </Field>
+      {/* Unchecked boxes aren't submitted, so "off" goes first and a tick wins. */}
+      <input type="hidden" name="isEstimate" value="off" />
+      <label className="flex cursor-pointer items-center gap-2 font-medium text-sm">
+        <input
+          type="checkbox"
+          name="isEstimate"
+          className="size-4 accent-primary"
+          defaultChecked={item?.isEstimate ?? false}
+        />
+        The amount is an estimate
+      </label>
+      <Field
+        label="Shows up as"
+        htmlFor="fixed-keywords"
+        hint="Optional. Names this bill's charges use, separated by commas, so your AI assistant can match them, e.g. Google Play, Google One."
+      >
+        <Input
+          id="fixed-keywords"
+          name="matchKeywords"
+          placeholder="Merchant names"
+          defaultValue={item?.matchKeywords?.join(", ") ?? ""}
+        />
+        <FieldError name="matchKeywords" />
+      </Field>
     </FormDialog>
   );
 }

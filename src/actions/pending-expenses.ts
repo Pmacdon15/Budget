@@ -17,10 +17,28 @@ export async function editPendingExpense(
   });
 }
 
-/** Saves the item as a normal expense. */
-export async function approvePendingExpense(id: string) {
+/**
+ * Saves the item as an expense. With `replace`, the fixed bill it pays takes
+ * this charge's amount from its month on.
+ */
+export async function approvePendingExpense(
+  id: string,
+  options: { replace?: boolean } = {},
+) {
   return runAction(async () => {
-    await dal.approvePending(idSchema.parse(id));
+    await dal.approvePending(idSchema.parse(id), {
+      replace: options?.replace === true,
+    });
+  });
+}
+
+/** Marks the item a subscription (fixed bill) or a normal expense. */
+export async function setPendingSubscription(
+  id: string,
+  subscription: boolean,
+) {
+  return runAction(async () => {
+    await dal.setPendingSubscription(idSchema.parse(id), subscription === true);
   });
 }
 

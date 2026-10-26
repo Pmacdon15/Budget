@@ -167,6 +167,9 @@ async function FixedBills({ month: monthPromise }: { month: Promise<string> }) {
                             }}
                           />
                           <span className="font-medium">{item.name}</span>
+                          {item.isEstimate ? (
+                            <Badge variant="outline">Estimate</Badge>
+                          ) : null}
                         </div>
                         <div className="mt-0.5 text-muted-foreground text-xs">
                           Since {monthLabel(item.startMonth, "short")}

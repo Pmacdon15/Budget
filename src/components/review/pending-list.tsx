@@ -61,6 +61,18 @@ function PendingRow({ item }: { item: PendingExpense }) {
             {item.hasReceipt ? (
               <Badge variant="outline">Receipt attached</Badge>
             ) : null}
+            {item.fixedItemId ? (
+              <Badge variant="outline">
+                Pays {item.fixedItemName ?? "a fixed bill"}
+                {item.fixedItemAmountCents != null
+                  ? ` (${item.fixedItemIsEstimate ? "est. " : ""}${formatMoney(item.fixedItemAmountCents)})`
+                  : ""}
+              </Badge>
+            ) : item.isSubscription ? (
+              <Badge variant="outline">
+                Subscription: becomes a fixed bill
+              </Badge>
+            ) : null}
           </p>
           <p className="text-muted-foreground text-sm">
             {day(item.spentOn)}

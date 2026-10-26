@@ -10,9 +10,13 @@ import {
   splitFixedItem,
   updateFixedItemValues,
 } from "@/db/fixed-items";
+import { cleanKeywords } from "@/lib/bill-matching";
 import { addMonths } from "@/lib/month";
 import type { FixedItemInput } from "@/lib/schemas";
 import type { FixedItem } from "@/lib/types";
+
+/** A change to a bill: the form's fields, plus the merchant the AI can set. */
+export type FixedItemUpdate = FixedItemInput & { merchant?: string | null };
 
 /* ---------- Reads ---------- */
 
@@ -23,11 +27,16 @@ export async function getFixedItems(): Promise<FixedItem[]> {
 
 /* ---------- Writes ---------- */
 
-const values = (input: FixedItemInput) => ({
+const values = (input: FixedItemUpdate) => ({
   name: input.name,
   category: input.category,
   amountCents: input.amount,
   dueDay: input.dueDay,
+  ...(input.isEstimate === undefined ? {} : { isEstimate: input.isEstimate }),
+  ...(input.matchKeywords === undefined
+    ? {}
+    : { matchKeywords: cleanKeywords(input.matchKeywords) }),
+  ...(input.merchant === undefined ? {} : { merchant: input.merchant }),
 });
 
 export async function createFixedItem(input: FixedItemInput) {
@@ -51,7 +60,7 @@ export async function updateFixedItem(id: string, input: FixedItemInput) {
 export async function updateFixedItemFor(
   userId: string,
   id: string,
-  input: FixedItemInput,
+  input: FixedItemUpdate,
 ) {
   const item = await selectFixedItem(userId, id);
   if (!item) throw new NotFoundError();
