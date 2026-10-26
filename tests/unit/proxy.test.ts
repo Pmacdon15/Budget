@@ -47,6 +47,9 @@ describe("proxy (Clerk middleware)", () => {
     "/report/csv",
     "/api/receipts",
     "/api/cronjob",
+    "/review",
+    // Only the MCP endpoint itself checks its own token.
+    "/api/mcp-other",
   ])("requires sign-in for %s", async (path) => {
     const { protect } = await visit(path);
     expect(protect).toHaveBeenCalledOnce();
@@ -60,6 +63,12 @@ describe("proxy (Clerk middleware)", () => {
     "/welcome",
     // Vercel Cron; the route checks CRON_SECRET itself.
     "/api/cron/receipt-photos",
+    // The MCP server checks its own OAuth token or API key and answers 401.
+    "/api/mcp",
+    // OAuth discovery for MCP clients.
+    "/.well-known/oauth-protected-resource",
+    "/.well-known/oauth-protected-resource/api/mcp",
+    "/.well-known/oauth-authorization-server",
   ])("leaves %s public", async (path) => {
     const { protect } = await visit(path);
     expect(protect).not.toHaveBeenCalled();

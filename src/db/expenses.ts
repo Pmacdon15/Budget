@@ -90,6 +90,19 @@ export async function selectExpensesForExport(
   }));
 }
 
+/** One of this user's expenses, or null when it's missing or someone else's. */
+export async function selectExpenseById(
+  userId: string,
+  id: string,
+): Promise<Expense | null> {
+  const rows = await db()`
+    select id, month, spent_on, description, category, amount_cents, receipt_id
+    from expenses
+    where id = ${id} and user_id = ${userId}
+  `;
+  return rows[0] ? toExpense(rows[0]) : null;
+}
+
 export async function insertExpense(userId: string, values: ExpenseValues) {
   await db()`
     insert into expenses (user_id, month, spent_on, description, category, amount_cents)
