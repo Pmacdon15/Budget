@@ -12,7 +12,6 @@ import {
   markExpensePaidRow,
   selectExpenseById,
   selectExpensesWithStatus,
-  setExpenseReceipt,
   updateExpenseRow,
 } from "@/db/expenses";
 import {
@@ -30,8 +29,8 @@ import {
   selectPendingExpense,
   selectPendingExpenses,
   setPendingBill,
-  setPendingReceipt,
 } from "@/db/pending-expenses";
+import { selectReceiptSourceMatch } from "@/db/receipt-files";
 import {
   type BillMatch,
   cleanKeywords,
@@ -45,7 +44,6 @@ import {
   type AddExpenseInput,
   addExpenseInputSchema,
   addFixedBillInputSchema,
-  attachReceiptInputSchema,
   convertExpenseToFixedBillInputSchema,
   deleteExpenseInputSchema,
   duplicateMessage,
@@ -57,19 +55,20 @@ import {
   listFixedBillsInputSchema,
   markBillPaidInputSchema,
   markExpensePaidInputSchema,
-  type ReceiptDetails,
-  type ReceiptInput,
   syncBankBalanceInputSchema,
   toCents,
   unlinkFixedBillInputSchema,
 } from "@/lib/pending-expenses";
-import {
-  isJpeg,
-  MAX_IMAGE_BYTES,
-  newReceiptImagePathname,
-} from "@/lib/receipt-image";
-import { deleteReceiptImage, putReceiptImage } from "@/lib/receipt-store";
+import { receiptKindLabel } from "@/lib/receipt-files";
 import type { FixedItem } from "@/lib/types";
+import {
+  attachReceiptFor,
+  discardReceiptFiles,
+  friendly,
+  preparedKind,
+  prepareReceipt,
+  storePreparedReceipt,
+} from "@/mcp/receipts";
 
 /*
  * What each MCP tool does, as plain functions of the verified caller. The
@@ -97,73 +96,11 @@ const dollars = (cents: number) => cents / 100;
 
 const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
-/** Input a schema can't catch (a bad image, an empty receipt), as a readable tool error. */
-class ToolInputError extends Error {}
-
 const notFound = (what: string, lookup: string): ToolResult => ({
   summary: `No ${what} with that id. Call ${lookup} to find it.`,
   data: {},
   isError: true,
 });
-
-/**
- * Turns a receipt from the AI into what's stored: amounts in cents and, when
- * it sent a JPEG, the photo saved to the caller's own folder in the private
- * store. Throws ToolInputError for an image that isn't a JPEG or is too big.
- */
-async function storeReceipt(
-  userId: string,
-  input: ReceiptInput,
-): Promise<ReceiptDetails> {
-  const details = {
-    merchant: input.merchant || null,
-    purchasedOn: input.purchased_on ?? null,
-    subtotalCents:
-      input.subtotal === undefined ? null : toCents(input.subtotal),
-    taxCents: input.tax === undefined ? null : toCents(input.tax),
-    totalCents: input.total === undefined ? null : toCents(input.total),
-    rawText: input.text?.trim() || null,
-  };
-  const hasDetails = Object.values(details).some((v) => v !== null);
-  if (!hasDetails && !input.image_jpeg_base64) {
-    throw new ToolInputError(
-      "The receipt is empty. Send at least its total, text or a JPEG.",
-    );
-  }
-
-  let imagePathname: string | null = null;
-  if (input.image_jpeg_base64) {
-    const bytes = new Uint8Array(
-      Buffer.from(input.image_jpeg_base64, "base64"),
-    );
-    if (!isJpeg(bytes)) {
-      throw new ToolInputError(
-        "The image isn't a JPEG. Send the receipt's text instead (e.g. from its PDF).",
-      );
-    }
-    if (bytes.length > MAX_IMAGE_BYTES) {
-      throw new ToolInputError("The image is larger than 3MB.");
-    }
-    imagePathname = newReceiptImagePathname(userId);
-    await putReceiptImage(
-      imagePathname,
-      new Blob([bytes], { type: "image/jpeg" }),
-    );
-  }
-  return { ...details, imagePathname };
-}
-
-/** Runs `tool`, turning a ToolInputError into a tool error the AI can read. */
-async function friendly(tool: () => Promise<ToolResult>): Promise<ToolResult> {
-  try {
-    return await tool();
-  } catch (error) {
-    if (error instanceof ToolInputError) {
-      return { summary: error.message, data: {}, isError: true };
-    }
-    throw error;
-  }
-}
 
 function daysAgo(date: string, days: number) {
   const d = new Date(`${date}T00:00:00Z`);
@@ -216,6 +153,7 @@ export async function listExpenses(
         amount: dollars(e.amountCents),
         unpaid: e.unpaid,
         has_receipt: e.hasReceipt,
+        ...(e.hasReceipt ? { receipt_kind: e.receiptKind ?? "details" } : {}),
         fixed_bill_id: e.fixedItemId ?? null,
       })),
       pending_review: pending.map((p) => ({
@@ -227,6 +165,7 @@ export async function listExpenses(
         amount: dollars(p.amountCents),
         unpaid: p.unpaid,
         has_receipt: p.hasReceipt,
+        ...(p.hasReceipt ? { receipt_kind: p.receiptKind ?? "details" } : {}),
         fixed_bill_id: p.fixedItemId ?? null,
         is_subscription: p.isSubscription ?? "unknown",
       })),
@@ -247,13 +186,15 @@ async function addExpenseFor(
 ): Promise<ToolResult> {
   const input: AddExpenseInput = addExpenseInputSchema.parse(args);
   const amountCents = toCents(input.amount);
+  // Checked before anything else, so a bad file never gets as far as storing.
+  const prepared = input.receipt ? prepareReceipt(input.receipt) : null;
 
   if (!input.allow_duplicate) {
-    const match = await selectDuplicateMatch(
-      caller.userId,
-      input.date,
-      amountCents,
-    );
+    const match =
+      (await selectDuplicateMatch(caller.userId, input.date, amountCents)) ??
+      (prepared
+        ? await selectReceiptSourceMatch(caller.userId, prepared.source)
+        : null);
     if (match) {
       return {
         summary: `${duplicateMessage(match)} Nothing was saved. Ask the user whether this is the same purchase. Only if they say it's a separate charge, call add_expense again with allow_duplicate: true.`,
@@ -302,8 +243,8 @@ async function addExpenseFor(
     }
   }
 
-  const receipt = input.receipt
-    ? await storeReceipt(caller.userId, input.receipt)
+  const receipt = prepared
+    ? await storePreparedReceipt(caller.userId, prepared)
     : null;
   const id = await insertPendingExpense(caller.userId, {
     spentOn: input.date,
@@ -330,7 +271,9 @@ async function addExpenseFor(
     input.unpaid
       ? "Marked not paid yet: it stays off the bank balance until mark_expense_paid."
       : null,
-    receipt ? "Receipt attached." : null,
+    prepared
+      ? `Receipt attached (${receiptKindLabel(preparedKind(prepared))}).`
+      : null,
   ].filter(Boolean);
   return {
     summary: `Sent to Pending Review: ${input.merchant}, $${input.amount.toFixed(2)} on ${input.date} (${input.category}). The user approves it in Budget at ${REVIEW_URL} before it counts as an expense.${notes.length ? ` ${notes.join(" ")}` : ""}`,
@@ -340,6 +283,7 @@ async function addExpenseFor(
       review_url: REVIEW_URL,
       unpaid: input.unpaid ?? false,
       has_receipt: receipt !== null,
+      receipt_kind: prepared ? preparedKind(prepared) : null,
       fixed_bill_id: fixedItemId,
     },
   };
@@ -414,7 +358,7 @@ export async function deleteExpense(
       isError: true,
     };
   }
-  if (deleted.imagePathname) await deleteReceiptImage(deleted.imagePathname);
+  await discardReceiptFiles([deleted.imagePathname, deleted.filePathname]);
   return {
     summary: `Deleted: ${existing.description}, $${(existing.amountCents / 100).toFixed(2)} on ${existing.spentOn}.`,
     data: { id: input.id, deleted: true },
@@ -456,45 +400,7 @@ export function attachReceipt(
   caller: McpCaller,
   args: unknown,
 ): Promise<ToolResult> {
-  return friendly(async () => {
-    const input = attachReceiptInputSchema.parse(args);
-    // Check the target first, so a photo is never stored for nothing.
-    if (input.expense_id) {
-      if (!(await selectExpenseById(caller.userId, input.expense_id))) {
-        return notFound("expense", "list_expenses");
-      }
-    } else if (
-      !(await selectPendingExpenses(caller.userId)).some(
-        (p) => p.id === input.pending_id,
-      )
-    ) {
-      return notFound("pending item", "list_expenses");
-    }
-
-    const receipt = await storeReceipt(caller.userId, input);
-    const result = input.expense_id
-      ? await setExpenseReceipt(caller.userId, input.expense_id, receipt)
-      : await setPendingReceipt(
-          caller.userId,
-          String(input.pending_id),
-          receipt,
-        );
-    if (!result) {
-      if (receipt.imagePathname)
-        await deleteReceiptImage(receipt.imagePathname);
-      return notFound("expense", "list_expenses");
-    }
-    if (result.replacedImage) await deleteReceiptImage(result.replacedImage);
-    return {
-      summary: `Receipt attached${receipt.imagePathname ? " with its photo" : ""}.`,
-      data: {
-        id: input.expense_id ?? input.pending_id,
-        kind: input.expense_id ? "expense" : "pending",
-        has_photo: receipt.imagePathname !== null,
-        replaced_photo: Boolean(result.replacedImage),
-      },
-    };
-  });
+  return friendly(() => attachReceiptFor(caller, args));
 }
 
 const billData = (bill: FixedItem, paid?: boolean) => ({

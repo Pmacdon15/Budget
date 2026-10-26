@@ -1,10 +1,12 @@
 import "server-only";
 import { db, type Row } from "@/db/client";
+import type { ReplacedFiles } from "@/db/receipt-files";
 import type {
   DuplicateMatch,
   PendingExpense,
   ReceiptDetails,
 } from "@/lib/pending-expenses";
+import { receiptKindOf } from "@/lib/receipt-files";
 
 /** Raw SQL for expenses waiting for review. Callers handle auth and rules. */
 
@@ -34,6 +36,15 @@ export const receiptJson = (r: ReceiptDetails) =>
     total_cents: r.totalCents,
     raw_text: r.rawText,
     image_pathname: r.imagePathname,
+    file_pathname: r.filePathname ?? null,
+    file_kind: r.fileKind ?? null,
+    file_name: r.fileName ?? null,
+    file_bytes: r.fileBytes ?? null,
+    email_subject: r.emailSubject ?? null,
+    email_from: r.emailFrom ?? null,
+    email_date: r.emailDate ?? null,
+    email_message_id: r.emailMessageId ?? null,
+    content_hash: r.contentHash ?? null,
   });
 
 function toDateString(value: unknown): string {
@@ -59,6 +70,13 @@ const toPending = (r: Row): PendingExpense => ({
   possibleDuplicate: Boolean(r.possible_duplicate),
   unpaid: Boolean(r.unpaid),
   hasReceipt: r.receipt != null,
+  receiptKind:
+    r.receipt == null
+      ? null
+      : receiptKindOf({
+          fileKind: r.receipt.file_kind,
+          imagePathname: r.receipt.image_pathname,
+        }),
   fixedItemId: r.fixed_item_id ?? null,
   fixedItemName: r.fixed_item_name ?? null,
   fixedItemAmountCents:
@@ -242,11 +260,18 @@ export async function approvePendingExpense(
     ),
     saved_receipt as (
       insert into receipts (user_id, merchant, purchased_on, subtotal_cents,
-                            tax_cents, total_cents, raw_text, image_pathname)
+                            tax_cents, total_cents, raw_text, image_pathname,
+                            file_pathname, file_kind, file_name, file_bytes,
+                            email_subject, email_from, email_date,
+                            email_message_id, content_hash)
       select user_id, receipt->>'merchant', (receipt->>'purchased_on')::date,
              (receipt->>'subtotal_cents')::int, (receipt->>'tax_cents')::int,
              (receipt->>'total_cents')::int, receipt->>'raw_text',
-             receipt->>'image_pathname'
+             receipt->>'image_pathname', receipt->>'file_pathname',
+             receipt->>'file_kind', receipt->>'file_name',
+             (receipt->>'file_bytes')::int, receipt->>'email_subject',
+             receipt->>'email_from', receipt->>'email_date',
+             receipt->>'email_message_id', receipt->>'content_hash'
       from taken
       where receipt is not null
       returning id
@@ -323,30 +348,37 @@ export async function selectPendingExpense(
 }
 
 /**
- * Attaches (or replaces) the item's receipt. Returns the photo the old receipt
- * had, if it was replaced by a different one, so the caller can remove it; or
- * false when no row matched.
+ * Attaches (or replaces) the item's receipt. Returns the copies (photo or
+ * file) the old receipt had, if a different one replaced them, so the caller
+ * can remove them; or false when no row matched.
  */
 export async function setPendingReceipt(
   userId: string,
   id: string,
   receipt: ReceiptDetails,
-): Promise<{ replacedImage: string | null } | false> {
+): Promise<ReplacedFiles | false> {
   const rows = await db()`
     with old as (
-      select receipt->>'image_pathname' as image from pending_expenses
+      select receipt->>'image_pathname' as image,
+             receipt->>'file_pathname' as file
+      from pending_expenses
       where id = ${id} and user_id = ${userId}
     )
     update pending_expenses set receipt = ${receiptJson(receipt)}::jsonb
     where id = ${id} and user_id = ${userId}
-    returning (select image from old) as old_image
+    returning (select image from old) as old_image,
+              (select file from old) as old_file
   `;
   const [row] = rows;
   if (!row) return false;
-  const oldImage = row.old_image ?? null;
   return {
-    replacedImage:
-      oldImage && oldImage !== receipt.imagePathname ? String(oldImage) : null,
+    replacedFiles: [row.old_image, row.old_file].filter(
+      (p): p is string =>
+        typeof p === "string" &&
+        p !== "" &&
+        p !== receipt.imagePathname &&
+        p !== receipt.filePathname,
+    ),
   };
 }
 

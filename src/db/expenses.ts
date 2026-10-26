@@ -1,5 +1,8 @@
 import "server-only";
 import { db, type Row } from "@/db/client";
+import { type ReplacedFiles, receiptValues } from "@/db/receipt-files";
+import type { ReceiptDetails } from "@/lib/pending-expenses";
+import { receiptKindOf } from "@/lib/receipt-files";
 import type { Expense, ExpenseExportRow } from "@/lib/types";
 
 /** Raw SQL for the expenses table. Callers (the DAL) handle auth and rules. */
@@ -23,14 +26,6 @@ export type ReceiptValues = {
   rawText: string | null;
 };
 
-/** The same, for a receipt that may have no photo (one read off an email). */
-export type ReceiptValuesNullableImage = Omit<
-  ReceiptValues,
-  "imagePathname"
-> & {
-  imagePathname: string | null;
-};
-
 function toDateString(value: unknown): string {
   if (value instanceof Date) return value.toISOString().slice(0, 10);
   return value == null ? "" : String(value).slice(0, 10);
@@ -50,6 +45,14 @@ export const toExpense = (r: Row): Expense => ({
   ...(r.receipt_has_photo === undefined
     ? {}
     : { receiptHasPhoto: Boolean(r.receipt_has_photo) }),
+  ...(r.receipt_kind === undefined || r.receipt_id == null
+    ? {}
+    : {
+        receiptKind: receiptKindOf({
+          fileKind: r.receipt_kind,
+          imagePathname: r.receipt_has_photo,
+        }),
+      }),
   ...(r.unpaid === undefined ? {} : { unpaid: Boolean(r.unpaid) }),
   ...(r.fixed_item_id === undefined
     ? {}
@@ -65,7 +68,9 @@ export async function selectExpensesBetween(
     select id, month, spent_on, description, category, amount_cents, receipt_id,
            unpaid,
            (select r.image_pathname is not null from receipts r
-            where r.id = expenses.receipt_id) as receipt_has_photo
+            where r.id = expenses.receipt_id) as receipt_has_photo,
+           (select r.file_kind from receipts r
+            where r.id = expenses.receipt_id) as receipt_kind
     from expenses
     where user_id = ${userId} and month between ${from} and ${to}
       -- Paid a fixed bill: the bill already counts for its month.
@@ -216,7 +221,11 @@ export async function updateExpenseRow(
 export async function deleteExpenseRow(
   userId: string,
   id: string,
-): Promise<{ imagePathname: string | null } | null> {
+): Promise<{
+  imagePathname: string | null;
+  /** A PDF or email copy the receipt had, when it had one. */
+  filePathname?: string;
+} | null> {
   const rows = await db()`
     with removed as (
       delete from expenses where id = ${id} and user_id = ${userId}
@@ -230,13 +239,18 @@ export async function deleteExpenseRow(
           select 1 from expenses other
           where other.receipt_id = r.id and other.id <> removed.id
         )
-      returning r.image_pathname
+      returning r.image_pathname, r.file_pathname
     )
-    select removed.id, (select image_pathname from gone limit 1) as image_pathname
+    select removed.id, (select image_pathname from gone limit 1) as image_pathname,
+           (select file_pathname from gone limit 1) as file_pathname
     from removed
   `;
   const [row] = rows;
-  return row ? { imagePathname: row.image_pathname ?? null } : null;
+  if (!row) return null;
+  return {
+    imagePathname: row.image_pathname ?? null,
+    ...(row.file_pathname ? { filePathname: String(row.file_pathname) } : {}),
+  };
 }
 
 /** The photo pathname of one of this user's receipts, or null. */
@@ -265,7 +279,11 @@ export async function selectExpensesWithStatus(
 ): Promise<ExpenseWithStatus[]> {
   const rows = await db()`
     select id, month, spent_on, description, category, amount_cents, receipt_id,
-           unpaid, fixed_item_id
+           unpaid, fixed_item_id,
+           (select r.image_pathname is not null from receipts r
+            where r.id = expenses.receipt_id) as receipt_has_photo,
+           (select r.file_kind from receipts r
+            where r.id = expenses.receipt_id) as receipt_kind
     from expenses
     where user_id = ${userId} and spent_on between ${from} and ${to}
     order by spent_on desc, created_at desc
@@ -307,41 +325,54 @@ export async function markExpensePaidRow(
 
 /**
  * Attaches a receipt to one of this user's expenses, or replaces the details
- * (and photo) of the one it has. A receipt split across several expenses is
- * shared, so replacing it changes it for every part. Returns the old photo when
- * a different one replaced it, so the caller can remove it; or false when the
- * expense is missing or someone else's.
+ * (and photo or file) of the one it has. A receipt split across several
+ * expenses is shared, so replacing it changes it for every part. Returns the
+ * old copies a different receipt replaced, so the caller can remove them; or
+ * false when the expense is missing or someone else's.
  */
 export async function setExpenseReceipt(
   userId: string,
   expenseId: string,
-  receipt: ReceiptValuesNullableImage,
-): Promise<{ replacedImage: string | null } | false> {
+  receipt: ReceiptDetails,
+): Promise<ReplacedFiles | false> {
+  const values = receiptValues(receipt);
   const rows = await db()`
     with target as (
       select id, receipt_id from expenses
       where id = ${expenseId} and user_id = ${userId}
     ),
     old as (
-      select r.image_pathname from receipts r, target
+      select r.image_pathname, r.file_pathname from receipts r, target
       where r.id = target.receipt_id and r.user_id = ${userId}
     ),
     updated as (
       update receipts r
-      set merchant = ${receipt.merchant}, purchased_on = ${receipt.purchasedOn},
-          subtotal_cents = ${receipt.subtotalCents}, tax_cents = ${receipt.taxCents},
-          total_cents = ${receipt.totalCents}, raw_text = ${receipt.rawText},
-          image_pathname = ${receipt.imagePathname}
+      set merchant = ${values.merchant}, purchased_on = ${values.purchasedOn},
+          subtotal_cents = ${values.subtotalCents}, tax_cents = ${values.taxCents},
+          total_cents = ${values.totalCents}, raw_text = ${values.rawText},
+          image_pathname = ${values.imagePathname},
+          file_pathname = ${values.filePathname}, file_kind = ${values.fileKind},
+          file_name = ${values.fileName}, file_bytes = ${values.fileBytes},
+          email_subject = ${values.emailSubject}, email_from = ${values.emailFrom},
+          email_date = ${values.emailDate},
+          email_message_id = ${values.emailMessageId},
+          content_hash = ${values.contentHash}
       from target
       where r.id = target.receipt_id and r.user_id = ${userId}
       returning r.id
     ),
     inserted as (
       insert into receipts (user_id, merchant, purchased_on, subtotal_cents,
-                            tax_cents, total_cents, raw_text, image_pathname)
-      select ${userId}, ${receipt.merchant}, ${receipt.purchasedOn},
-             ${receipt.subtotalCents}, ${receipt.taxCents}, ${receipt.totalCents},
-             ${receipt.rawText}, ${receipt.imagePathname}
+                            tax_cents, total_cents, raw_text, image_pathname,
+                            file_pathname, file_kind, file_name, file_bytes,
+                            email_subject, email_from, email_date,
+                            email_message_id, content_hash)
+      select ${userId}, ${values.merchant}, ${values.purchasedOn},
+             ${values.subtotalCents}, ${values.taxCents}, ${values.totalCents},
+             ${values.rawText}, ${values.imagePathname}, ${values.filePathname},
+             ${values.fileKind}, ${values.fileName}, ${values.fileBytes},
+             ${values.emailSubject}, ${values.emailFrom}, ${values.emailDate},
+             ${values.emailMessageId}, ${values.contentHash}
       from target
       where target.receipt_id is null
       returning id
@@ -354,13 +385,18 @@ export async function setExpenseReceipt(
     )
     select (select count(*) from target)::int as found,
            (select image_pathname from old limit 1) as old_image,
+           (select file_pathname from old limit 1) as old_file,
            (select count(*) from updated)::int + (select count(*) from linked)::int as changed
   `;
   const [row] = rows;
   if (!row || Number(row.found) === 0) return false;
-  const oldImage = row.old_image ?? null;
   return {
-    replacedImage:
-      oldImage && oldImage !== receipt.imagePathname ? String(oldImage) : null,
+    replacedFiles: [row.old_image, row.old_file].filter(
+      (p): p is string =>
+        typeof p === "string" &&
+        p !== "" &&
+        p !== receipt.imagePathname &&
+        p !== receipt.filePathname,
+    ),
   };
 }

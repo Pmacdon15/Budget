@@ -1,10 +1,19 @@
-import { CalendarDays, ImageOff, Paperclip } from "lucide-react";
+import {
+  CalendarDays,
+  Download,
+  FileText,
+  ImageOff,
+  Mail,
+  Paperclip,
+} from "lucide-react";
 import Link from "next/link";
+import { receiptFileHref } from "@/components/receipt-links";
 import { Badge } from "@/components/ui/badge";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { getReceiptLibrary } from "@/dal/receipt-library";
 import { categoryColor, categoryLabel } from "@/lib/categories";
 import { formatMoney } from "@/lib/money";
+import { receiptKindLabel } from "@/lib/receipt-files";
 import { RECEIPT_LIBRARY_LIMIT } from "@/lib/schemas/receipt-library";
 
 /** The `?q=` search text, once the URL is known. */
@@ -132,6 +141,23 @@ export async function ReceiptLibraryRows({
                   >
                     <Paperclip className="size-4" />
                   </a>
+                ) : receipt.kind === "pdf" || receipt.kind === "email" ? (
+                  <a
+                    href={receiptFileHref(receipt.id, receipt.kind)}
+                    target="_blank"
+                    rel="noopener"
+                    className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label={`View ${receiptKindLabel(receipt.kind)} for ${title}`}
+                    title={
+                      receipt.kind === "pdf" ? "View PDF" : "View the email"
+                    }
+                  >
+                    {receipt.kind === "pdf" ? (
+                      <FileText className="size-4" />
+                    ) : (
+                      <Mail className="size-4" />
+                    )}
+                  </a>
                 ) : (
                   <span
                     className="p-1.5 text-muted-foreground/60"
@@ -140,6 +166,17 @@ export async function ReceiptLibraryRows({
                     <ImageOff className="size-4" />
                   </span>
                 )}
+                {receipt.kind !== "details" ? (
+                  <a
+                    href={`${receiptFileHref(receipt.id, receipt.kind)}?download=1`}
+                    download
+                    className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label={`Download ${receiptKindLabel(receipt.kind)} for ${title}`}
+                    title="Download"
+                  >
+                    <Download className="size-4" />
+                  </a>
+                ) : null}
                 <Link
                   href={`/expenses?month=${receipt.month}`}
                   className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"

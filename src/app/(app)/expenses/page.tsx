@@ -1,4 +1,4 @@
-import { Paperclip, Plus, Receipt } from "lucide-react";
+import { Plus, Receipt } from "lucide-react";
 import { Suspense } from "react";
 import { CategoryBudgetsCard } from "@/components/budgets/category-budgets-card";
 import { CategoryBars } from "@/components/charts/category-bars";
@@ -13,6 +13,7 @@ import {
 import { ExportDialog } from "@/components/export-dialog";
 import { ExpenseDialog } from "@/components/forms/expense-dialog";
 import { PageHeader } from "@/components/page-header";
+import { ReceiptLinks, receiptFileHref } from "@/components/receipt-links";
 import { ScanReceiptButton } from "@/components/scan-receipt-button";
 import {
   ActionsSkeleton,
@@ -41,6 +42,7 @@ import { getMonthOverview } from "@/dal/overview";
 import { categoryColor, categoryLabel } from "@/lib/categories";
 import { formatMoney } from "@/lib/money";
 import { monthLabel } from "@/lib/month";
+import type { ReceiptKind } from "@/lib/receipt-files";
 import {
   type ExpenseSearch,
   expenseSearchFrom,
@@ -212,28 +214,16 @@ async function Expenses({
                           {expense.unpaid ? (
                             <Badge variant="outline">Not paid yet</Badge>
                           ) : null}
-                          {expense.receiptId &&
-                          expense.receiptHasPhoto === false ? (
-                            <span
-                              className="text-muted-foreground"
-                              title="Receipt details saved (no photo)"
-                            >
-                              <Paperclip
-                                className="size-3.5"
-                                aria-label="Receipt details saved, no photo"
-                              />
-                            </span>
-                          ) : expense.receiptId ? (
-                            <a
-                              href={`/api/receipts/${expense.receiptId}/image`}
-                              target="_blank"
-                              rel="noopener"
-                              className="text-muted-foreground hover:text-foreground"
-                              aria-label={`View receipt for ${expense.description}`}
-                              title="View receipt"
-                            >
-                              <Paperclip className="size-3.5" />
-                            </a>
+                          {expense.receiptId ? (
+                            <ReceiptLinks
+                              href={receiptFileHref(
+                                expense.receiptId,
+                                receiptKindOf(expense),
+                              )}
+                              photoHref={`/api/receipts/${expense.receiptId}/image`}
+                              kind={receiptKindOf(expense)}
+                              label={expense.description}
+                            />
                           ) : null}
                         </div>
                         <div className="mt-0.5 text-muted-foreground text-xs tabular-nums">
@@ -275,5 +265,16 @@ async function Expenses({
         </div>
       )}
     </>
+  );
+}
+
+/** What an expense's receipt shows, for its links. */
+function receiptKindOf(expense: {
+  receiptKind?: ReceiptKind | null;
+  receiptHasPhoto?: boolean;
+}): ReceiptKind {
+  return (
+    expense.receiptKind ??
+    (expense.receiptHasPhoto === false ? "details" : "photo")
   );
 }

@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/empty-state";
 import { FixedItemActions } from "@/components/fixed-item-actions";
 import { FixedItemDialog } from "@/components/forms/fixed-item-dialog";
 import { PageHeader } from "@/components/page-header";
+import { ReceiptLinks, receiptFileHref } from "@/components/receipt-links";
 import {
   ActionsSkeleton,
   SplitCardsSkeleton,
@@ -32,6 +33,10 @@ import {
 } from "@/components/ui/table";
 import { getPaidBillIds } from "@/dal/bill-payments";
 import { getFixedItems } from "@/dal/fixed-items";
+import {
+  type BillReceipt as BillReceiptRow,
+  getBillReceipts,
+} from "@/dal/receipt-files";
 import { summarizeBillsPaid } from "@/lib/bill-payments";
 import { isActive } from "@/lib/budget";
 import { categoryColor, categoryLabel } from "@/lib/categories";
@@ -90,9 +95,10 @@ export default function FixedPage({
 
 async function FixedBills({ month: monthPromise }: { month: Promise<string> }) {
   const month = await monthPromise;
-  const [all, paidIds] = await Promise.all([
+  const [all, paidIds, billReceipts] = await Promise.all([
     getFixedItems(),
     getPaidBillIds(month),
+    getBillReceipts(month),
   ]);
   const active = all
     .filter((item) => isActive(item, month))
@@ -190,12 +196,18 @@ async function FixedBills({ month: monthPromise }: { month: Promise<string> }) {
                         {formatMoney(item.amountCents)}
                       </TableCell>
                       <TableCell className="text-right">
-                        <BillPaidToggle
-                          fixedItemId={item.id}
-                          name={item.name}
-                          month={month}
-                          paid={paidIds.has(item.id)}
-                        />
+                        <div className="flex items-center justify-end gap-2">
+                          <BillReceipt
+                            receipt={billReceipts.get(item.id)}
+                            name={item.name}
+                          />
+                          <BillPaidToggle
+                            fixedItemId={item.id}
+                            name={item.name}
+                            month={month}
+                            paid={paidIds.has(item.id)}
+                          />
+                        </div>
                       </TableCell>
                       <TableCell>
                         <FixedItemActions item={item} month={month} />
@@ -230,5 +242,23 @@ async function FixedBills({ month: monthPromise }: { month: Promise<string> }) {
         </div>
       )}
     </>
+  );
+}
+
+/** The receipt on a bill's payment this month, when there is one to open. */
+function BillReceipt({
+  receipt,
+  name,
+}: {
+  receipt: BillReceiptRow | undefined;
+  name: string;
+}) {
+  if (!receipt) return null;
+  return (
+    <ReceiptLinks
+      href={receiptFileHref(receipt.receiptId, receipt.kind)}
+      kind={receipt.kind}
+      label={name}
+    />
   );
 }

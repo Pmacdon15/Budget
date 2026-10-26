@@ -52,9 +52,17 @@ export async function deleteBillPayment(
   fixedItemId: string,
   month: string,
 ) {
+  // A receipt kept on the payment itself goes with it (its file is removed by
+  // the daily cleanup). One on the expense that paid it stays with the expense.
   await db()`
-    delete from fixed_item_payments
-    where fixed_item_id = ${fixedItemId} and month = ${month} and user_id = ${userId}
+    with removed as (
+      delete from fixed_item_payments
+      where fixed_item_id = ${fixedItemId} and month = ${month} and user_id = ${userId}
+      returning receipt_id
+    )
+    delete from receipts r using removed
+    where r.id = removed.receipt_id and r.user_id = ${userId}
+      and not exists (select 1 from expenses e where e.receipt_id = r.id)
   `;
 }
 

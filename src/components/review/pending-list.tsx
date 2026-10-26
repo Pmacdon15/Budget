@@ -1,5 +1,9 @@
 import { Inbox } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
+import {
+  pendingReceiptFileHref,
+  ReceiptLinks,
+} from "@/components/receipt-links";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { getPendingAccounts } from "@/dal/accounts";
@@ -77,7 +81,16 @@ function PendingRow({ item }: { item: PendingExpense }) {
             ) : null}
             {item.unpaid ? <Badge variant="outline">Not paid yet</Badge> : null}
             {item.hasReceipt ? (
-              <Badge variant="outline">Receipt attached</Badge>
+              <Badge variant="outline">
+                Receipt attached
+                {item.receiptKind && item.receiptKind !== "details" ? (
+                  <ReceiptLinks
+                    href={pendingReceiptFileHref(item.id, item.receiptKind)}
+                    kind={item.receiptKind}
+                    label={item.description}
+                  />
+                ) : null}
+              </Badge>
             ) : null}
             {item.fixedItemId ? (
               <Badge variant="outline">
