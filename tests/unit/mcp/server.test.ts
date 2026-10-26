@@ -155,7 +155,15 @@ describe("server instructions", () => {
       /already counted: don't add it as a separate expense/,
     ],
     ["change a bill's price from that month on", /from_month/],
-    ["send a PDF receipt's text", /for a PDF receipt, send its text/],
+    ["send an email's PDF attachment as the receipt", /send it as pdf_base64/],
+    [
+      "send the email itself when it has no attachment",
+      /no attachment: send the email itself as email\.html/,
+    ],
+    [
+      "know re-sending the same email is safe",
+      /Sending the same email again is safe/,
+    ],
     ["read email with its own tools", /Budget never reads email itself/],
     [
       "treat an e-Transfer marked rent as paying the Rent bill",

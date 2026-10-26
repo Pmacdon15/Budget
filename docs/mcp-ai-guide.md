@@ -16,7 +16,7 @@ If your app can't sign in with OAuth, open **Review** in Budget, choose **Create
 
 1. **Look first.** Call `list_categories` once, plus `list_fixed_bills` and `list_expenses` for the dates involved, to suggest a category and spot anything already recorded: an expense, an item waiting for review, or a fixed bill.
 2. **Confirm the category with the user.** Say what you found and suggest a category, e.g. *"Shell, $45.67 on Oct 20 — Transportation?"*, and wait for a yes or a different category.
-3. **`add_expense` goes to review.** It doesn't create an expense. The item lands on the user's **Pending Review** list in Budget, and they approve, edit or reject it there. When the email is the receipt, include it as `receipt`.
+3. **`add_expense` goes to review.** It doesn't create an expense. The item lands on the user's **Pending Review** list in Budget, and they approve, edit or reject it there. When the email is the bill or receipt, include it as `receipt`, with a copy of the email (see [Receipts](#receipts)).
 4. **Ask about duplicates.** If `add_expense` answers `possible_duplicate`, nothing was saved. Show the user the match and ask whether it's the same purchase. Only resubmit with `allow_duplicate: true` if they say it's a separate charge.
 5. **One purchase, one expense.** An order confirmation, a shipping notice, a receipt and a card alert are often all the same purchase. Two charges with the same amount on the same day count as one unless the user says otherwise.
 6. **Not paid yet stays off the balance.** An order or invoice that hasn't been paid (*"will be processed once payment is confirmed"*) goes in with `unpaid: true`. It counts as spending, but doesn't come off the bank balance. When the payment shows up (a transfer sent, a payment confirmation), call `mark_expense_paid` with the day it was paid.
@@ -31,7 +31,22 @@ If your app can't sign in with OAuth, open **Review** in Budget, choose **Create
 
 ## Receipts
 
-`add_expense` takes an optional `receipt`, and `attach_receipt` adds one to (or replaces the one on) a saved expense or an item waiting for review. A receipt is what it says — `merchant`, `purchased_on`, `subtotal`, `tax`, `total`, `text` — plus, optionally, `image_jpeg_base64`: a JPEG of it. Only JPEGs are stored as photos. For a PDF receipt (most emailed ones), send its text and amounts instead. Expenses with a photo show 📎 that opens it. Ones with details only show the 📎 without a link.
+Budget keeps a copy of each bill or receipt email, so your receipts live in one place: you can open and download them in Budget instead of digging through your email.
+
+`add_expense` takes an optional `receipt`, and `attach_receipt` adds one to (or replaces the one on) a saved expense (`expense_id`), an item waiting for review (`pending_id`), or a fixed bill's payment for a month (`fixed_bill_id` and `month`; mark the bill paid first). A receipt is:
+
+- **What it says**: `merchant`, `purchased_on`, `subtotal`, `tax`, `total`, `text`.
+- **Which email it came from**: `email` with `message_id`, `subject`, `from` and `date`. Always send these.
+- **One copy to keep**:
+  - The email has a **PDF attachment** (the bill, invoice or receipt): send it as `pdf_base64`, with `pdf_filename`.
+  - It has a **JPEG** of the receipt: send it as `image_jpeg_base64`.
+  - It has **no attachment**: send the email itself as `email.html` (or `email.text` when it has no HTML). The email's body is only saved when there's no attachment.
+
+Files are 3MB at most, and must be what they say (a PDF starts with `%PDF-`, a JPEG with its own marker). An email's HTML can be up to 1,000,000 characters and its text up to 200,000. Before saving an email, Budget removes scripts, forms, style blocks and remote images (tracking pixels), and shows it in a sandbox where nothing can run or load from the internet.
+
+**Sending the same email twice is safe.** `attach_receipt` recognizes an email it already has (by `message_id`, or by the file's contents) and answers `already_attached` without saving anything. A different email or a new reading replaces the receipt; an item never has two. `add_expense` answers `possible_duplicate` when another expense or pending item already holds that receipt email.
+
+In Budget, receipts show next to the expense on **Spending**, the item on **Review**, the bill on **Fixed bills** (for the month it was paid) and in **Receipts**, with a link to open it (a paperclip for a photo, a page for a PDF, an envelope for an email) and one to download it. A receipt with details only shows a plain paperclip.
 
 ## Tools
 
@@ -43,7 +58,7 @@ If your app can't sign in with OAuth, open **Review** in Budget, choose **Create
 | `find_matching_fixed_bill` | Which fixed bills a charge (`merchant`, `description`, `amount`, `date`) could be, with a score, the amount difference and a suggestion to show the user | No |
 | `add_expense` | Sends a charge to Pending Review: `amount`, `date`, `merchant`, `category`, optional `description`, `source`, `unpaid`, `receipt`, `allow_duplicate`, `fixed_bill_id` (it's that bill's payment), `is_subscription` | Adds to review only |
 | `mark_expense_paid` | Marks an unpaid expense (or pending item) paid on `paid_on`, so it comes off the balance | Yes |
-| `attach_receipt` | Adds or replaces a receipt on an expense (`expense_id`) or pending item (`pending_id`) | Yes |
+| `attach_receipt` | Adds or replaces a receipt on an expense (`expense_id`), pending item (`pending_id`) or fixed bill payment (`fixed_bill_id` + `month`): its details plus a JPEG, the email's PDF, or the email itself. The same email again answers `already_attached` | Yes |
 | `sync_bank_balance` | Sets the bank balance to what the bank reported: `balance` (negative when overdrawn), optional `source` | Yes |
 | `add_fixed_bill` | Adds a monthly bill: `name`, `category`, `amount`, optional `due_day`, `start_month`, `merchant`, `match_keywords`, `is_estimate` | Yes |
 | `edit_fixed_bill` | Changes a bill from `from_month` on: `amount`, `name`, `category`, `due_day` | Yes (destructive) |
@@ -55,7 +70,9 @@ If your app can't sign in with OAuth, open **Review** in Budget, choose **Create
 
 ## Examples
 
-**A gas receipt.** The assistant finds an email from Shell for $45.67 on October 20. It checks `list_expenses` for Oct 20 (nothing matching), then asks: *"Shell, $45.67 on Oct 20 — Transportation?"* You say yes. It calls `add_expense` with `category: "Transportation"`, the receipt's total and text, and `source: "receipts@shell.ca: Your receipt"`, and tells you it's waiting for you on the Review page.
+**A gas receipt.** The assistant finds an email from Shell for $45.67 on October 20. It checks `list_expenses` for Oct 20 (nothing matching), then asks: *"Shell, $45.67 on Oct 20 — Transportation?"* You say yes. It calls `add_expense` with `category: "Transportation"`, the receipt's total and text, the email itself as `receipt.email` (Shell's email has no attachment), and `source: "receipts@shell.ca: Your receipt"`, and tells you it's waiting for you on the Review page.
+
+**A bill with a PDF.** Your Rogers bill email has the bill attached as a PDF, and your Internet fixed bill is already marked paid for October. The assistant calls `attach_receipt` with `fixed_bill_id`, `month: "2026-10"`, the bill's amounts, `email` (its message id, subject, sender, date) and `pdf_base64`. The PDF shows next to Internet on Fixed bills, ready to open or download. If it runs again tomorrow and finds the same email, `attach_receipt` answers `already_attached` and nothing changes.
 
 **An Amazon order and its shipping email.** The order confirmation for $62.10 on October 12 goes in as above. Later the assistant finds the "Your order has shipped" email for the same $62.10. `add_expense` answers `possible_duplicate`, matching the item already waiting for review. The assistant asks whether it's the same order; you say yes, and nothing more is added. If you'd bought the same thing twice that day, you'd say so and it would resubmit with `allow_duplicate: true`.
 
