@@ -27,7 +27,7 @@ const dayCount = (n: number) => `${n} ${n === 1 ? "day" : "days"}`;
 
 async function SafeToSpendCard({ month: monthPromise, className }: Props) {
   const month = await monthPromise;
-  const [{ current }, recurring] = await Promise.all([
+  const [{ current, leftover }, recurring] = await Promise.all([
     getMonthOverview(month),
     getRecurringIncomeForMonth(month),
   ]);
@@ -35,10 +35,13 @@ async function SafeToSpendCard({ month: monthPromise, className }: Props) {
   const daysLeft = daysLeftInMonth(month, today());
   if (daysLeft === 0) return null;
 
+  // Held to net chequing like leftover spend: nothing is safe to spend while
+  // the chequing accounts are negative overall.
   const { leftCents, perDayCents } = safeToSpend({
     incomeCents: current.incomeCents,
     spentCents: current.spentCents,
     daysLeft,
+    netChequingCents: leftover.netChequingCents,
   });
   const expectedCents = recurring
     .filter((r) => r.status.state === "expected")
@@ -50,7 +53,20 @@ async function SafeToSpendCard({ month: monthPromise, className }: Props) {
   }).format(new Date(`${lastDayOf(month)}T00:00:00Z`));
 
   const noIncome = current.incomeCents <= 0;
-  const over = !noIncome && leftCents <= 0;
+  const overdrawn = leftover.limitedBy === "overdrawn";
+  const overdrawnBy = -(leftover.netChequingCents ?? 0);
+  const emptyChequing =
+    !noIncome && leftover.limitedBy === "chequing" && leftCents <= 0;
+  const over = !noIncome && !overdrawn && !emptyChequing && leftCents <= 0;
+  const message = overdrawn
+    ? `Your chequing is ${formatMoney(overdrawnBy)} below zero, so nothing is safe to spend until it's back above zero.`
+    : noIncome
+      ? "Add this month's take-home to see what's safe to spend."
+      : emptyChequing
+        ? "There's nothing in your chequing accounts, so nothing is safe to spend."
+        : over
+          ? `Over by ${formatMoney(-leftCents)} this month, with ${dayCount(daysLeft)} to go.`
+          : `${formatMoney(leftCents)} left for the next ${dayCount(daysLeft)}, through ${through}.`;
 
   return (
     <Card size="sm" className={cn("mt-4", className)}>
@@ -64,23 +80,23 @@ async function SafeToSpendCard({ month: monthPromise, className }: Props) {
             <p
               className={cn(
                 "font-semibold text-2xl tabular-nums tracking-tight",
-                over && "text-rose-600 dark:text-rose-400",
+                (over || overdrawn) && "text-rose-600 dark:text-rose-400",
               )}
             >
-              {noIncome ? "—" : `${formatMoney(perDayCents)} / day`}
+              {noIncome && !overdrawn
+                ? "—"
+                : `${formatMoney(perDayCents)} / day`}
             </p>
           </div>
         </div>
         <div className="grid flex-1 gap-0.5 text-sm">
-          <p>
-            {noIncome
-              ? "Add this month's take-home to see what's safe to spend."
-              : over
-                ? `Over by ${formatMoney(-leftCents)} this month, with ${dayCount(daysLeft)} to go.`
-                : `${formatMoney(leftCents)} left for the next ${dayCount(daysLeft)}, through ${through}.`}
-          </p>
+          <p>{message}</p>
           <p className="text-muted-foreground text-xs">
-            Take-home minus fixed bills and spending so far.
+            Take-home minus fixed bills and spending so far
+            {leftover.limitedBy === "chequing"
+              ? ", held to what's in your chequing accounts"
+              : ""}
+            . Credit cards and lines of credit aren't counted.
             {expectedCents > 0
               ? ` ${formatMoney(expectedCents)} in repeating take-home isn't added yet, so it isn't counted.`
               : null}
