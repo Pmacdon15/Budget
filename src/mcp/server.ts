@@ -50,6 +50,11 @@ export const SERVER_INFO = { name: "budget", version: "1.0.0" };
 export const SERVER_OPTIONS = {
   serverInfo: SERVER_INFO,
   instructions: MCP_INSTRUCTIONS,
+  // The tool list never changes while a client is connected. Saying so keeps
+  // clients from holding a `subscriptions/listen` stream open for change
+  // notifications: on a serverless function that stream can only end in a
+  // timeout, which some clients then report as the connector failing.
+  capabilities: { tools: { listChanged: false } },
 };
 
 /** The verified caller from the request's auth, or null when there isn't one. */

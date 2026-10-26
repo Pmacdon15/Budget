@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, vi } from "vitest";
-import { signInAs } from "../helpers/auth";
+import { clerkOAuth, signInAs } from "../helpers/auth";
 import { resetTestDb, startTestDb } from "../helpers/test-db";
 
 // The app's Neon client is swapped for an in-memory Postgres running the real schema.
@@ -10,8 +10,16 @@ vi.mock("@/db/client", async () => {
 });
 
 vi.mock("@clerk/nextjs/server", async () => {
-  const { authState } = await import("../helpers/auth");
-  return { auth: vi.fn(async () => ({ userId: authState.userId })) };
+  const { authState, clerkOAuth } = await import("../helpers/auth");
+  return {
+    auth: vi.fn(async () => ({ userId: authState.userId })),
+    // The MCP endpoint asks Clerk about OAuth access tokens directly.
+    clerkClient: vi.fn(async () => ({
+      authenticateRequest: vi.fn(async (request: Request) =>
+        clerkOAuth.authenticate(request),
+      ),
+    })),
+  };
 });
 
 vi.mock("next/navigation", async () => {
@@ -36,4 +44,5 @@ beforeAll(async () => {
 beforeEach(async () => {
   await resetTestDb();
   signInAs("user_a");
+  clerkOAuth.reset();
 });
