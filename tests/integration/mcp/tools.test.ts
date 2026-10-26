@@ -176,7 +176,7 @@ describe("approving what the AI added", () => {
     await setBankBalance({ balance: "500" });
     await rows(
       // Entered Oct 1, so the Oct 20 charges below count.
-      "update bank_balances set updated_at = '2026-10-01T18:00:00Z'",
+      "update accounts set balance_as_of = '2026-10-01T18:00:00Z'",
     );
     const { data } = await addExpense(A, shell);
     expect((await getBankBalance())?.balanceCents).toBe(50_000);
@@ -194,7 +194,7 @@ describe("sync_bank_balance", () => {
     await setBankBalance({ balance: "1000" });
     await rows(
       // Entered Oct 1, so the Oct 20 charge below counts.
-      "update bank_balances set updated_at = '2026-10-01T18:00:00Z'",
+      "update accounts set balance_as_of = '2026-10-01T18:00:00Z'",
     );
     await savedExpense("Shell", "45.67");
     expect((await getBankBalance())?.balanceCents).toBe(100_000 - 4_567);

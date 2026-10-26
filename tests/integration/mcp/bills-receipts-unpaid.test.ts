@@ -52,7 +52,7 @@ const PNG_BASE64 = Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]).toString(
 /** Enters a balance and marks it as set on Oct 1, before everything below. */
 async function balanceOnOct1(balance: string) {
   await setBankBalance({ balance });
-  await rows("update bank_balances set updated_at = '2026-10-01T18:00:00Z'");
+  await rows("update accounts set balance_as_of = '2026-10-01T18:00:00Z'");
 }
 
 async function approveOnly() {

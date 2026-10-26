@@ -293,13 +293,18 @@ describe("MCP endpoint with an API key", () => {
       "edit_expense",
       "edit_fixed_bill",
       "find_matching_fixed_bill",
+      "list_accounts",
       "list_categories",
       "list_expenses",
       "list_fixed_bills",
       "mark_bill_paid",
       "mark_expense_paid",
+      "propose_account",
+      "record_statement",
+      "record_transfer",
       "sync_bank_balance",
       "unlink_fixed_bill",
+      "update_account_balance",
     ]);
   });
 

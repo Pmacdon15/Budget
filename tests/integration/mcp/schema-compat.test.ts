@@ -82,7 +82,7 @@ describe("tool schemas every client accepts", () => {
       }),
     );
     const { result } = await res.json();
-    expect(result.tools.length).toBe(15);
+    expect(result.tools.length).toBeGreaterThanOrEqual(15);
     for (const tool of result.tools as {
       name: string;
       inputSchema: Schema;

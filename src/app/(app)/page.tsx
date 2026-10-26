@@ -383,20 +383,29 @@ async function SpendingStat({ month }: MonthProp) {
 }
 
 async function LeftOverStat({ month }: MonthProp) {
-  const { current } = await overviewFor(month);
+  // Leftover spend: held to net chequing, and 0 while chequing is negative.
+  const { current, leftover } = await overviewFor(month);
   const savingsRate =
     current.incomeCents > 0 ? current.netCents / current.incomeCents : 0;
+  const hint =
+    leftover.limitedBy === "overdrawn"
+      ? "Chequing is below zero"
+      : leftover.limitedBy === "chequing"
+        ? "All that's in chequing"
+        : current.incomeCents > 0
+          ? `${formatPercent(savingsRate)} of take-home`
+          : "Add take-home";
   return (
     <StatCard
       label="Left over"
       icon={current.netCents >= 0 ? PiggyBank : TrendingDown}
       value={formatMoney(current.netCents)}
-      tone={current.netCents >= 0 ? "positive" : "negative"}
-      hint={
-        current.incomeCents > 0
-          ? `${formatPercent(savingsRate)} of take-home`
-          : "Add take-home"
+      tone={
+        leftover.limitedBy === "overdrawn" || current.netCents < 0
+          ? "negative"
+          : "positive"
       }
+      hint={hint}
     />
   );
 }

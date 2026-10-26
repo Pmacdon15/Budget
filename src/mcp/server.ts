@@ -2,6 +2,13 @@ import "server-only";
 import type { AuthInfo, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import {
+  listAccountsInputSchema,
+  proposeAccountInputSchema,
+  recordStatementInputSchema,
+  recordTransferInputSchema,
+  updateAccountBalanceInputSchema,
+} from "@/lib/account-tools";
+import {
   addExpenseInputSchema,
   addFixedBillInputSchema,
   attachReceiptInputSchema,
@@ -18,6 +25,13 @@ import {
   syncBankBalanceInputSchema,
   unlinkFixedBillInputSchema,
 } from "@/lib/pending-expenses";
+import {
+  listAccounts,
+  proposeAccount,
+  recordStatement,
+  recordTransfer,
+  updateAccountBalance,
+} from "@/mcp/account-tools";
 import { MCP_INSTRUCTIONS } from "@/mcp/instructions";
 import { portable } from "@/mcp/portable-schema";
 import {
@@ -170,7 +184,7 @@ export function registerBudgetTools(server: McpServer) {
     {
       title: "Set bank balance",
       description:
-        "Sets the user's bank balance to what their bank reported (from a low-balance or debit alert, or a statement). It replaces the balance; it never subtracts. Expenses added after this come off it. Don't also add_expense a charge only because a bank alert mentions it.",
+        "Sets the user's bank balance (their primary chequing account, the one expenses come off) to what their bank reported in a low-balance or debit alert. It replaces the balance; it never subtracts. Expenses added after this come off it. Don't also add_expense a charge only because a bank alert mentions it. When the email names the account (institution and last four digits), use update_account_balance; for a statement, record_statement.",
       inputSchema: portable(syncBankBalanceInputSchema),
       annotations: {
         readOnlyHint: false,
@@ -379,5 +393,93 @@ export function registerBudgetTools(server: McpServer) {
       run(server, ctx.http?.authInfo, (caller) =>
         unlinkFixedBill(caller, args),
       ),
+  );
+  server.registerTool(
+    "list_accounts",
+    {
+      title: "List accounts",
+      description:
+        "The user's accounts (chequing, credit cards, lines of credit) with their ids, institutions, last four digits and balances now, plus accounts waiting for review, net chequing and this month's leftover spend. Credit card and line of credit balances are what's owed. Call it before updating a balance, recording a statement or a transfer.",
+      inputSchema: portable(listAccountsInputSchema),
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    (args, ctx) =>
+      run(server, ctx.http?.authInfo, (caller) => listAccounts(caller, args)),
+  );
+
+  server.registerTool(
+    "propose_account",
+    {
+      title: "Propose a new account for review",
+      description:
+        "Proposes an account Budget doesn't have yet (named by institution, type and last four unless you give a name). It goes to the user's Pending Review list; nothing is created until they approve it. Answers 'already_exists' or 'already_pending' without saving when the institution and last four already match. Ask the user before proposing if you aren't sure it's a new account.",
+      inputSchema: portable(proposeAccountInputSchema),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    (args, ctx) =>
+      run(server, ctx.http?.authInfo, (caller) => proposeAccount(caller, args)),
+  );
+
+  server.registerTool(
+    "update_account_balance",
+    {
+      title: "Update an account's balance",
+      description:
+        "Sets one account's balance to what the bank reported (an alert or balance email), found by account_id or by institution plus last four digits, with when it was true (as_of) and where it came from (source). An older balance never replaces a newer one: the answer is 'kept_newer' and nothing changes. For a credit card or line of credit, the balance is what's owed. For a statement, use record_statement instead.",
+      inputSchema: portable(updateAccountBalanceInputSchema),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    (args, ctx) =>
+      run(server, ctx.http?.authInfo, (caller) =>
+        updateAccountBalance(caller, args),
+      ),
+  );
+
+  server.registerTool(
+    "record_statement",
+    {
+      title: "Record a statement",
+      description:
+        "Records a statement email for the account it names (institution plus last four digits): the closing balance as of the closing date, minimum payment, due date and, with pdf_base64, the statement PDF, saved so the user can download it. A statement is a snapshot: it updates the balance only when nothing newer is known. With no matching account, it proposes a new one (with account_type) for the user to approve on the Review page. Recording the same statement again changes nothing.",
+      inputSchema: portable(recordStatementInputSchema),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    (args, ctx) =>
+      run(server, ctx.http?.authInfo, (caller) =>
+        recordStatement(caller, args),
+      ),
+  );
+
+  server.registerTool(
+    "record_transfer",
+    {
+      title: "Record a transfer between accounts",
+      description:
+        "Records money moved between two of the user's accounts, such as a credit card or line of credit payment from chequing. It lowers one balance and changes the other; it is never an expense, so don't also add_expense it. Answers 'possible_duplicate' without saving when the same accounts, amount and day are already recorded; only resubmit with allow_duplicate: true if the user says it's separate.",
+      inputSchema: portable(recordTransferInputSchema),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    (args, ctx) =>
+      run(server, ctx.http?.authInfo, (caller) => recordTransfer(caller, args)),
   );
 }
