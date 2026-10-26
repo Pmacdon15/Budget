@@ -173,9 +173,36 @@ describe("FixedItemDialog", () => {
         amount: "1500",
         dueDay: "1",
         category: "Housing",
+        isEstimate: "off",
+        matchKeywords: "",
       }),
     );
     expect(toast.success).toHaveBeenCalledWith("Bill added");
+  });
+
+  it("sends the estimate tick and the names the bill's charges use", async () => {
+    renderWithQuery(<FixedItemDialog month="2026-10" trigger={trigger} />);
+    const { user, dialog } = await open();
+    await user.type(within(dialog).getByLabelText("Name"), "Google One");
+    await user.type(within(dialog).getByLabelText("Amount / month"), "3");
+    await user.click(
+      within(dialog).getByLabelText("The amount is an estimate"),
+    );
+    await user.type(
+      within(dialog).getByLabelText("Shows up as"),
+      "Google Play, Google One",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Add bill" }));
+
+    await waitFor(() =>
+      expect(fixedActions.createFixedItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "Google One",
+          isEstimate: "on",
+          matchKeywords: "Google Play, Google One",
+        }),
+      ),
+    );
   });
 
   it("explains that edits apply from this month on", async () => {
@@ -201,6 +228,8 @@ describe("FixedItemDialog", () => {
         amount: "60.00",
         dueDay: "",
         category: "Housing",
+        isEstimate: "off",
+        matchKeywords: "",
       }),
     );
   });

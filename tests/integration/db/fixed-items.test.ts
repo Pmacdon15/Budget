@@ -25,11 +25,17 @@ async function onlyItem(userId = "user_a") {
 describe("db/fixed-items", () => {
   it("inserts and reads back a bill", async () => {
     await insertFixedItem("user_a", { ...values, startMonth: "2026-10" });
-    expect(await onlyItem()).toEqual({
+    const item = await onlyItem();
+    expect(item).toEqual({
       id: expect.any(String),
       ...values,
       startMonth: "2026-10",
       endMonth: null,
+      isEstimate: false,
+      merchant: null,
+      matchKeywords: [],
+      // A new bill starts its own series.
+      seriesId: item.id,
     });
   });
 

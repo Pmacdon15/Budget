@@ -127,15 +127,18 @@ describe("MCP endpoint with an API key", () => {
       "add_expense",
       "add_fixed_bill",
       "attach_receipt",
+      "convert_expense_to_fixed_bill",
       "delete_expense",
       "edit_expense",
       "edit_fixed_bill",
+      "find_matching_fixed_bill",
       "list_categories",
       "list_expenses",
       "list_fixed_bills",
       "mark_bill_paid",
       "mark_expense_paid",
       "sync_bank_balance",
+      "unlink_fixed_bill",
     ]);
   });
 
