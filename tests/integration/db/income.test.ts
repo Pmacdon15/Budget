@@ -23,11 +23,14 @@ describe("db/income", () => {
       receivedOn: null,
     });
     const found = await selectIncomeBetween("user_a", "2026-10", "2026-10");
+    // Typed-in entries have no payer or receipt.
+    const none = { payer: null, receiptId: null, receiptKind: null };
     expect(found).toEqual([
-      { id: expect.any(String), ...values },
+      { id: expect.any(String), ...values, ...none },
       {
         id: expect.any(String),
         ...values,
+        ...none,
         label: "Side job",
         receivedOn: null,
       },

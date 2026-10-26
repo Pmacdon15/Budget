@@ -51,6 +51,10 @@ function toAccount(r: Row): Account {
   const transfersSinceCents = isDebtType(type)
     ? outCents - inCents
     : inCents - outCents;
+  // Deposits only go into chequing or savings, so they only ever raise it.
+  const depositsSinceCents = isDebtType(type)
+    ? 0
+    : Number(r.deposits_cents ?? 0);
   return {
     id: r.id,
     type,
@@ -58,10 +62,12 @@ function toAccount(r: Row): Account {
     institution: r.institution ?? null,
     lastFour: r.last_four ?? null,
     isPrimary: Boolean(r.is_primary),
-    balanceCents: enteredCents - spentSinceCents + transfersSinceCents,
+    balanceCents:
+      enteredCents - spentSinceCents + transfersSinceCents + depositsSinceCents,
     enteredCents,
     spentSinceCents,
     transfersSinceCents,
+    depositsSinceCents,
     balanceAsOf: toIso(r.balance_as_of),
     balanceSource: r.balance_source ?? null,
     creditLimitCents: centsOrNull(r.credit_limit_cents),
@@ -84,6 +90,9 @@ function toAccount(r: Row): Account {
  *   the app's time zone; an unpaid expense waits until it's paid), and
  * - for every account, plus or minus transfers that came after it by the same
  *   rule. Transfers are never expenses, so they're never counted as spending.
+ * - for every account, plus take-home entries deposited into it (income with
+ *   its account_id, such as an e-Transfer an AI found and the user approved)
+ *   that came after it by the same rule.
  * Editing or deleting an expense or transfer can never leave it wrong, and a
  * new balance starts fresh.
  */
@@ -129,7 +138,14 @@ export async function selectAccounts(
              where t.user_id = a.user_id and t.from_account_id = a.id
                and t.created_at > a.balance_as_of
                and t.transferred_on >= (a.balance_as_of at time zone ${TIME_ZONE}::text)::date
-           ), 0) as transfers_out_cents
+           ), 0) as transfers_out_cents,
+           coalesce((
+             select sum(i.amount_cents) from income i
+             where i.user_id = a.user_id and i.account_id = a.id
+               and i.received_on is not null
+               and i.created_at > a.balance_as_of
+               and i.received_on >= (a.balance_as_of at time zone ${TIME_ZONE}::text)::date
+           ), 0) as deposits_cents
     from accounts a
     where a.user_id = ${userId}
       and (${id}::uuid is null or a.id = ${id}::uuid)

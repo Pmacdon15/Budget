@@ -47,7 +47,8 @@ export type Account = {
   isPrimary: boolean;
   /**
    * The balance now: what was entered (or reported), less the expenses that
-   * came off it since (primary account only), adjusted by transfers since.
+   * came off it since (primary account only), adjusted by transfers since,
+   * plus take-home deposited into it since.
    * For debt accounts, what's owed.
    */
   balanceCents: number;
@@ -57,6 +58,8 @@ export type Account = {
   spentSinceCents: number;
   /** What transfers since then changed it by, in the account's own sign. */
   transfersSinceCents: number;
+  /** Take-home deposited into it since then (chequing or savings only). */
+  depositsSinceCents?: number;
   /** When the entered balance was true, as an ISO timestamp. */
   balanceAsOf: string;
   /** manual, alert, statement, migrated, or another note from the AI. */

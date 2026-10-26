@@ -217,6 +217,24 @@ export async function restoreIncome(
           ) then '{}'::jsonb
           else '{"recurring_id": null}'::jsonb
         end
+        -- And the account it went into, and its receipt, only if they're
+        -- still there.
+        || case
+          when entry.record->>'account_id' is null or exists (
+            select 1 from accounts a
+            where a.id::text = entry.record->>'account_id'
+              and a.user_id = ${userId}
+          ) then '{}'::jsonb
+          else '{"account_id": null}'::jsonb
+        end
+        || case
+          when entry.record->>'receipt_id' is null or exists (
+            select 1 from receipts r
+            where r.id::text = entry.record->>'receipt_id'
+              and r.user_id = ${userId}
+          ) then '{}'::jsonb
+          else '{"receipt_id": null}'::jsonb
+        end
       )).*
       from entry
       where entry.record->>'user_id' = ${userId}

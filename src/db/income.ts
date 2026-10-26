@@ -1,5 +1,6 @@
 import "server-only";
 import { db, type Row } from "@/db/client";
+import { receiptKindOf } from "@/lib/receipt-files";
 import type { IncomeEntry } from "@/lib/types";
 
 /** Raw SQL for the income table. Callers (the DAL) handle auth and rules. */
@@ -23,6 +24,14 @@ const toIncomeEntry = (r: Row): IncomeEntry => ({
   label: r.label,
   amountCents: Number(r.amount_cents),
   receivedOn: toDateString(r.received_on),
+  payer: r.payer ?? null,
+  receiptId: r.receipt_id ?? null,
+  receiptKind: r.receipt_id
+    ? receiptKindOf({
+        fileKind: r.file_kind,
+        imagePathname: r.image_pathname,
+      })
+    : null,
 });
 
 export async function selectIncomeBetween(
@@ -31,12 +40,40 @@ export async function selectIncomeBetween(
   to: string,
 ): Promise<IncomeEntry[]> {
   const rows = await db()`
-    select id, month, label, amount_cents, received_on
-    from income
-    where user_id = ${userId} and month between ${from} and ${to}
-    order by month desc, received_on desc nulls last, created_at desc
+    select i.id, i.month, i.label, i.amount_cents, i.received_on, i.payer,
+           r.id as receipt_id, r.file_kind, r.image_pathname
+    from income i
+    left join receipts r on r.id = i.receipt_id and r.user_id = i.user_id
+    where i.user_id = ${userId} and i.month between ${from} and ${to}
+    order by i.month desc, i.received_on desc nulls last, i.created_at desc
   `;
   return rows.map(toIncomeEntry);
+}
+
+/**
+ * Take-home entries received between two days (inclusive), newest first. An
+ * entry with no date counts as received on the first of its month.
+ */
+export async function selectIncomeReceivedBetween(
+  userId: string,
+  from: string,
+  to: string,
+): Promise<(IncomeEntry & { accountId: string | null })[]> {
+  const rows = await db()`
+    select i.id, i.month, i.label, i.amount_cents, i.received_on, i.payer,
+           i.account_id, r.id as receipt_id, r.file_kind, r.image_pathname
+    from income i
+    left join receipts r on r.id = i.receipt_id and r.user_id = i.user_id
+    where i.user_id = ${userId}
+      and coalesce(i.received_on, to_date(i.month || '-01', 'YYYY-MM-DD'))
+          between ${from}::date and ${to}::date
+    order by coalesce(i.received_on, to_date(i.month || '-01', 'YYYY-MM-DD')) desc,
+             i.created_at desc
+  `;
+  return rows.map((r) => ({
+    ...toIncomeEntry(r),
+    accountId: r.account_id ?? null,
+  }));
 }
 
 export async function selectLatestIncome(

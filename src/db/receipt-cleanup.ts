@@ -5,9 +5,9 @@ import { db } from "@/db/client";
 
 /**
  * Which of `pathnames` (photos, or receipt files: a PDF or a saved email) are
- * still in use: saved with a receipt, attached by an AI to an item waiting on
- * the Review page, or held by an undo entry younger than `undoWindowMinutes`
- * that could bring one back.
+ * still in use: saved with a receipt, attached by an AI to an item (expense
+ * or income) waiting on the Review page, or held by an undo entry younger
+ * than `undoWindowMinutes` that could bring one back.
  */
 export async function selectPhotosInUse(
   pathnames: string[],
@@ -27,6 +27,11 @@ export async function selectPhotosInUse(
         select 1 from pending_expenses pe
         where pe.receipt->>'image_pathname' = p.pathname
            or pe.receipt->>'file_pathname' = p.pathname
+      )
+      or exists (
+        select 1 from pending_income pi
+        where pi.receipt->>'image_pathname' = p.pathname
+           or pi.receipt->>'file_pathname' = p.pathname
       )
       or exists (
         select 1 from undo_deletes u

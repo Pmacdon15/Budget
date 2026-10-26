@@ -27,9 +27,17 @@ const accountStatements = readFileSync(FILE, "utf8")
   )
   .filter(Boolean);
 
-const everythingBefore = schemaStatements().filter(
-  (s) => !accountStatements.includes(s),
-);
+/**
+ * Every statement that runs before this migration (the schema, then earlier
+ * migrations in name order), as the live database had them. Later migrations
+ * may build on the accounts table, so they're left out.
+ */
+const everythingBefore = (() => {
+  const all = schemaStatements();
+  const first = all.indexOf(accountStatements[0] ?? "");
+  if (first < 0) throw new Error("the accounts migration isn't in the schema");
+  return all.slice(0, first);
+})();
 
 let db: PGlite;
 

@@ -354,7 +354,10 @@ export async function selectReceiptFile(
   return toStoredFile(rows[0]);
 }
 
-/** The copy attached to one of this user's items waiting for review, or null. */
+/**
+ * The copy attached to one of this user's items waiting for review (an
+ * expense or income), or null.
+ */
 export async function selectPendingReceiptFile(
   userId: string,
   pendingId: string,
@@ -367,6 +370,12 @@ export async function selectPendingReceiptFile(
            receipt->>'email_subject' as email_subject,
            coalesce(receipt->>'merchant', merchant) as merchant
     from pending_expenses
+    where id = ${pendingId} and user_id = ${userId} and receipt is not null
+    union all
+    select receipt->>'image_pathname', receipt->>'file_pathname',
+           receipt->>'file_kind', receipt->>'file_name',
+           receipt->>'email_subject', coalesce(receipt->>'merchant', payer)
+    from pending_income
     where id = ${pendingId} and user_id = ${userId} and receipt is not null
   `;
   return toStoredFile(rows[0]);

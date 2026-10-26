@@ -84,7 +84,7 @@ export type DuplicateMatch = {
 /** Upper bound for one expense the AI can add: $1,000,000. */
 const MAX_AMOUNT = 1_000_000;
 
-const isoDate = z
+export const isoDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Use the date as YYYY-MM-DD")
   .refine((value) => {
@@ -96,7 +96,7 @@ const isoDate = z
     );
   }, "That date doesn't exist");
 
-const dollars = z
+export const dollars = z
   .number()
   .positive("The amount must be more than zero")
   .max(MAX_AMOUNT, "That amount is too large")
@@ -105,7 +105,7 @@ const dollars = z
     "Use at most two decimal places",
   );
 
-const label = (name: string) =>
+export const label = (name: string) =>
   z
     .string()
     .trim()
