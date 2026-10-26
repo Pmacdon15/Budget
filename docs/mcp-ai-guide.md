@@ -12,6 +12,17 @@ This guide explains how the assistant is meant to use it. The same rules are sen
 
 If your app can't sign in with OAuth, open **Review** in Budget, choose **Create API key**, and give the app the URL plus the key. You can revoke a key there at any time.
 
+### Apps that ask for a Client ID
+
+Claude, ChatGPT and Gemini register themselves with Budget's sign-in (Clerk) automatically, so you only give them the URL. Some apps, such as Muse, don't, and show a **Client ID** field next to the server URL instead. For those, create a client for the app once:
+
+1. In the [Clerk dashboard](https://dashboard.clerk.com), open Budget's application, then **Configure → OAuth applications → Add OAuth application**.
+2. Name it after the app (e.g. *Muse*), make it a **public** client (no client secret; it uses PKCE), and turn on the `profile` and `email` scopes (plus `offline_access` if offered, so the app stays signed in).
+3. Add the app's **redirect / callback URL** as a redirect URI. The app shows it in its connector settings or documentation.
+4. Save, copy the **Client ID**, and paste it into the app's Client ID field, with `https://budget.patmac.ca/api/mcp` as the server URL. Leave any client secret field empty.
+
+The app then signs you in to Budget like any other. If it can't do OAuth at all, use an API key as above.
+
 ## The rules
 
 1. **Look first.** Call `list_categories` once, plus `list_fixed_bills` and `list_expenses` for the dates involved, to suggest a category and spot anything already recorded: an expense, an item waiting for review, or a fixed bill.
@@ -37,7 +48,7 @@ If your app can't sign in with OAuth, open **Review** in Budget, choose **Create
 
 | Tool | What it does | Changes data? |
 | --- | --- | --- |
-| `list_categories` | The categories Budget uses, with examples of what goes in each | No |
+| `list_categories` | The categories Budget uses, with examples of what goes in each (`include_examples: false` for just the names) | No |
 | `list_expenses` | Saved expenses and items waiting for review between two dates (default: the last 31 days), with their ids and whether each is unpaid or has a receipt | No |
 | `list_fixed_bills` | Fixed bills for a month (default: this month), with ids, whether each is marked paid or an estimate, its amount history, when it was last charged, and saved expenses that look like it but aren't linked | No |
 | `find_matching_fixed_bill` | Which fixed bills a charge (`merchant`, `description`, `amount`, `date`) could be, with a score, the amount difference and a suggestion to show the user | No |
