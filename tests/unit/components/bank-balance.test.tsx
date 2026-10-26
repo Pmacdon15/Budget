@@ -81,6 +81,9 @@ describe("BankBalanceDialog", () => {
 
   it("starts from the saved balance, keeping its minus", async () => {
     const { input } = await open({
+      accountId: "00000000-0000-4000-8000-000000000001",
+      accountName: "Chequing",
+      transfersSinceCents: 0,
       balanceCents: -12_345,
       enteredCents: -12_345,
       spentSinceCents: 0,

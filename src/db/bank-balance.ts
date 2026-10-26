@@ -1,92 +1,73 @@
 import "server-only";
+import { deleteAccountRow, selectAccounts } from "@/db/accounts";
 import { db } from "@/db/client";
 import type { BankBalance } from "@/lib/bank-balance";
-import { TIME_ZONE } from "@/lib/month";
-
-/** Raw SQL for the bank balance. Callers (the DAL) handle auth. */
-
-function toIso(value: unknown) {
-  return value instanceof Date
-    ? value.toISOString()
-    : new Date(String(value)).toISOString();
-}
 
 /**
- * The balance the user last entered, less the expenses that came after it.
- *
- * An expense comes off when it was added after the balance was set *and* it is
- * dated on or after the day the balance was set (in the app's time zone). An
- * unpaid expense (an order waiting on a bank transfer) stays off until it is
- * marked paid, and then counts by when it was paid instead.
- * Anything dated earlier is already in the number the bank showed, so it
- * never comes off twice, even when it is added (or approved from Review)
- * after the balance was entered or synced from a bank alert.
- *
- * A fixed bill marked paid with the day it was paid comes off by the same rule,
- * unless an expense paid it: then the expense is the one debit.
- *
- * The debit is worked out on read instead of being written into the row, so
- * editing, deleting or undoing an expense can never leave it wrong, and
- * entering a new balance starts fresh.
+ * Raw SQL for the bank balance: the primary chequing account's balance, the
+ * one expenses come off. (Before accounts it was its own table,
+ * bank_balances, which the accounts migration copied into a default chequing
+ * account.) Callers (the DAL) handle auth.
+ */
+
+/**
+ * The primary account's balance now, or null when there's no primary chequing
+ * account. Worked out on read (see selectAccounts): what was entered, less
+ * expenses and paid bills that came after it, adjusted by transfers since.
+ * Anything dated before the day it was entered is already in the number, so
+ * it never comes off twice.
  */
 export async function selectBankBalance(
   userId: string,
 ): Promise<BankBalance | null> {
-  const [row] = await db()`
-    select b.balance_cents, b.updated_at,
-           coalesce((
-             select sum(e.amount_cents) from expenses e
-             where e.user_id = b.user_id
-               -- Not paid yet: it hasn't left the bank.
-               and not e.unpaid
-               -- Paid later than it was spent: what matters is when it was paid.
-               and coalesce(e.paid_at, e.created_at) > b.updated_at
-               and coalesce(e.paid_on, e.spent_on)
-                   >= (b.updated_at at time zone ${TIME_ZONE}::text)::date
-           ), 0)
-           -- Fixed bills marked paid the same way. A bill paid by a linked
-           -- expense comes off through that expense, so it isn't counted here.
-           -- Marks with no day are bookkeeping only (from before bills had one).
-           + coalesce((
-             select sum(p.amount_cents) from fixed_item_payments p
-             where p.user_id = b.user_id
-               and p.expense_id is null
-               and p.paid_on is not null
-               and p.amount_cents is not null
-               and p.created_at > b.updated_at
-               and p.paid_on >= (b.updated_at at time zone ${TIME_ZONE}::text)::date
-           ), 0) as spent_since_cents
-    from bank_balances b
-    where b.user_id = ${userId}
-  `;
-  if (!row) return null;
-  const enteredCents = Number(row.balance_cents);
-  const spentSinceCents = Number(row.spent_since_cents);
+  const primary = (await selectAccounts(userId)).find((a) => a.isPrimary);
+  if (!primary) return null;
   return {
-    balanceCents: enteredCents - spentSinceCents,
-    enteredCents,
-    spentSinceCents,
-    updatedAt: toIso(row.updated_at),
+    accountId: primary.id,
+    accountName: primary.name,
+    balanceCents: primary.balanceCents,
+    enteredCents: primary.enteredCents,
+    spentSinceCents: primary.spentSinceCents,
+    transfersSinceCents: primary.transfersSinceCents,
+    updatedAt: primary.balanceAsOf,
   };
 }
 
 /**
- * Saves the balance, replacing the last one, and stamps the time. Expenses
- * added from now on come off it.
+ * Sets the primary account's balance as of now, replacing the last one.
+ * Expenses added from now on come off it. With no primary account yet, makes
+ * one ("Chequing"), so entering a balance always works.
  */
-export async function upsertBankBalance(userId: string, balanceCents: number) {
+export async function upsertBankBalance(
+  userId: string,
+  balanceCents: number,
+  source = "manual",
+) {
   await db()`
-    insert into bank_balances (user_id, balance_cents, updated_at)
-    values (${userId}, ${balanceCents}, now())
-    on conflict (user_id)
-    do update set balance_cents = excluded.balance_cents, updated_at = now()
+    with updated as (
+      update accounts set balance_cents = ${balanceCents},
+                          balance_as_of = now(),
+                          balance_source = ${source},
+                          updated_at = now()
+      where user_id = ${userId} and is_primary
+      returning id
+    )
+    insert into accounts (user_id, type, name, balance_cents, balance_as_of,
+                          balance_source, is_primary)
+    select ${userId}, 'chequing', 'Chequing', ${balanceCents}, now(),
+           ${source}, true
+    where not exists (select 1 from updated)
   `;
 }
 
-/** Returns false when there was nothing to remove. */
-export async function deleteBankBalance(userId: string): Promise<boolean> {
-  const rows = await db()`
-    delete from bank_balances where user_id = ${userId} returning user_id
-  `;
-  return rows.length > 0;
+/**
+ * Removes the primary account (the balance card's "Remove"). Returns its
+ * statement PDFs to remove, or null when there was nothing to remove.
+ */
+export async function deleteBankBalance(
+  userId: string,
+): Promise<{ pdfPathnames: string[] } | null> {
+  const primary = (await selectAccounts(userId)).find((a) => a.isPrimary);
+  if (!primary) return null;
+  return deleteAccountRow(userId, primary.id);
 }

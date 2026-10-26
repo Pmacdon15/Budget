@@ -7,6 +7,7 @@ import {
   upsertBankBalance,
 } from "@/db/bank-balance";
 import type { BankBalance, BankBalanceInput } from "@/lib/bank-balance";
+import { deleteStatementPdf } from "@/lib/statement-store";
 
 /* ---------- Reads ---------- */
 
@@ -23,8 +24,16 @@ export async function setBankBalance(input: BankBalanceInput) {
   await upsertBankBalance(userId, input.balance);
 }
 
-/** Removes the balance. Clearing one that isn't there is fine. */
+/**
+ * Removes the balance (the primary account, with its statements). Clearing
+ * one that isn't there is fine.
+ */
 export async function clearBankBalance() {
   const userId = await currentUserIdOrThrow();
-  await deleteBankBalance(userId);
+  const removed = await deleteBankBalance(userId);
+  await Promise.all(
+    (removed?.pdfPathnames ?? []).map((pathname) =>
+      deleteStatementPdf(pathname),
+    ),
+  );
 }

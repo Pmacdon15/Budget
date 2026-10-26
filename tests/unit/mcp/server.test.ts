@@ -5,6 +5,13 @@ import { MCP_INSTRUCTIONS } from "@/mcp/instructions";
 import { callerFrom, registerBudgetTools, SERVER_OPTIONS } from "@/mcp/server";
 
 // The tools' database work is covered by tests/integration/mcp.
+vi.mock("@/mcp/account-tools", () => ({
+  listAccounts: vi.fn(),
+  proposeAccount: vi.fn(),
+  recordStatement: vi.fn(),
+  recordTransfer: vi.fn(),
+  updateAccountBalance: vi.fn(),
+}));
 vi.mock("@/mcp/tools", () => ({
   addExpense: vi.fn(),
   addFixedBill: vi.fn(),
@@ -57,13 +64,18 @@ describe("Budget MCP server", () => {
       "edit_expense",
       "edit_fixed_bill",
       "find_matching_fixed_bill",
+      "list_accounts",
       "list_categories",
       "list_expenses",
       "list_fixed_bills",
       "mark_bill_paid",
       "mark_expense_paid",
+      "propose_account",
+      "record_statement",
+      "record_transfer",
       "sync_bank_balance",
       "unlink_fixed_bill",
+      "update_account_balance",
     ]);
   });
 
@@ -78,6 +90,7 @@ describe("Budget MCP server", () => {
       "list_categories",
       "list_expenses",
       "list_fixed_bills",
+      "list_accounts",
     ]) {
       expect(tools.get(name)?.annotations?.readOnlyHint, name).toBe(true);
     }
@@ -111,6 +124,10 @@ describe("Budget MCP server", () => {
       "mark_bill_paid",
       "attach_receipt",
       "add_fixed_bill",
+      "propose_account",
+      "update_account_balance",
+      "record_statement",
+      "record_transfer",
     ]) {
       expect(tools.get(name)?.annotations?.readOnlyHint, name).toBe(false);
       expect(tools.get(name)?.annotations?.destructiveHint, name).toBe(false);
@@ -124,6 +141,10 @@ describe("Budget MCP server", () => {
       "edit_expense",
       "delete_expense",
       "list_expenses",
+      "propose_account",
+      "update_account_balance",
+      "record_statement",
+      "record_transfer",
     ]) {
       expect(tools.get(name)?.inputSchema, name).toBeDefined();
     }
@@ -162,6 +183,31 @@ describe("server instructions", () => {
       /message "rent".*mark_bill_paid/,
     ],
     ["only count e-Transfers the user sent", /Only e-Transfers you sent count/],
+    [
+      "match accounts by institution plus last four",
+      /institution plus last four digits/,
+    ],
+    [
+      "send a new account to review",
+      /Pending Review list like expenses do, and nothing is created until they approve it/,
+    ],
+    [
+      "treat a statement as a snapshot",
+      /snapshot as of its closing date: it never replaces a newer balance/,
+    ],
+    ["save the statement PDF", /pdf_base64/],
+    [
+      "record card payments as transfers, not expenses",
+      /is a transfer, not an expense\. Call record_transfer.*never also call add_expense/,
+    ],
+    [
+      "only count chequing toward leftover spend",
+      /Only chequing counts toward leftover spend/,
+    ],
+    [
+      "ask when unsure which account",
+      /aren't sure which account.*ask the user/,
+    ],
   ])("tell the AI to %s", (_rule, pattern) => {
     expect(MCP_INSTRUCTIONS).toMatch(pattern);
   });

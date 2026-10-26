@@ -65,7 +65,7 @@ describe("Bank balance on the Overview", () => {
     await setBankBalance({ balance: "1000" });
     await rows(
       // Entered Oct 1, so the Oct 20 charges below count.
-      "update bank_balances set updated_at = '2026-10-01T18:00:00Z'",
+      "update accounts set balance_as_of = '2026-10-01T18:00:00Z'",
     );
     await createExpense({
       description: "Shell",
