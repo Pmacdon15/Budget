@@ -7,6 +7,7 @@ import {
   StandardFonts,
 } from "pdf-lib";
 import { CATEGORY_NAMES, categoryLabel as labelOf } from "@/lib/categories";
+import { toCsv } from "@/lib/exports/csv";
 import { buildXlsx, type Cell, XLSX_CONTENT_TYPE } from "@/lib/exports/xlsx";
 import { formatMoney } from "@/lib/money";
 import { monthLabel } from "@/lib/month";
@@ -102,16 +103,6 @@ export async function buildExpenseExport(
 
 /* ---------- CSV ---------- */
 
-/**
- * Quotes where needed, and defuses text a spreadsheet would run as a formula
- * (receipt text is AI output, so it is not trusted to be harmless).
- */
-export function csvCell(value: string | number) {
-  let text = String(value);
-  if (typeof value === "string" && /^[=+\-@\t\r]/.test(text)) text = `'${text}`;
-  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
-
 export function buildCsv(rows: ExpenseExportRow[]) {
   const lines: (string | number)[][] = [
     [
@@ -143,7 +134,7 @@ export function buildCsv(rows: ExpenseExportRow[]) {
     ]),
     ["total", "", "All", dollars(grandTotal(rows))],
   ];
-  return lines.map((line) => line.map(csvCell).join(",")).join("\n");
+  return toCsv(lines);
 }
 
 /* ---------- Excel ---------- */

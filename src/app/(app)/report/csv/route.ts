@@ -1,11 +1,7 @@
 import { getMonthOverview } from "@/dal/overview";
 import { categoryLabel } from "@/lib/categories";
+import { toCsv } from "@/lib/exports/csv";
 import { resolveMonth } from "@/lib/month";
-
-const cell = (value: string | number) => {
-  const text = String(value);
-  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-};
 
 const dollars = (cents: number) => (cents / 100).toFixed(2);
 
@@ -46,7 +42,7 @@ export async function GET(request: Request) {
     ["summary", month, "Left over", "", dollars(current.netCents)],
   ];
 
-  const body = rows.map((row) => row.map(cell).join(",")).join("\n");
+  const body = toCsv(rows);
   return new Response(body, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
