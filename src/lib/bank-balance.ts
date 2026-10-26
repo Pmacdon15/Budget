@@ -3,9 +3,10 @@ import { formatMoney, parseSignedMoney } from "@/lib/money";
 import { TIME_ZONE } from "@/lib/month";
 
 /*
- * The user's current bank balance, as they last typed it in. It's the one
- * amount in the app allowed below zero, for an overdrawn account. Shared by
- * browser and server.
+ * The user's current bank balance: the primary chequing account's, the one
+ * expenses come off, as they last typed it in (or a bank alert reported it).
+ * It can be below zero, for an overdrawn account. Shared by browser and
+ * server.
  */
 
 /** $1 trillion either way: far past any real balance, and exact as a JS number. */
@@ -33,15 +34,20 @@ export type BankBalanceFormValues = z.input<typeof bankBalanceSchema>;
 export type BankBalanceInput = z.output<typeof bankBalanceSchema>;
 
 export type BankBalance = {
+  /** The primary chequing account this balance is. */
+  accountId: string;
+  accountName: string;
   /**
    * What's in the account now: the entered balance less the expenses added
-   * since. Below zero when the account is overdrawn.
+   * since, adjusted by transfers since. Below zero when overdrawn.
    */
   balanceCents: number;
   /** The balance as the user (or their AI) last entered it. */
   enteredCents: number;
   /** Expenses added after it was entered, which have come off it. */
   spentSinceCents: number;
+  /** Transfers since it was entered: positive when money came in. */
+  transfersSinceCents: number;
   /** When it was last entered, as an ISO timestamp. */
   updatedAt: string;
 };
@@ -65,9 +71,20 @@ export function balanceUpdatedLabel(updatedAt: string) {
  * "Entered $1,250.00, less $80.00 spent since", or null when nothing has been
  * spent since it was entered (the balance is just what was typed).
  */
-export function balanceDebitLabel(balance: BankBalance) {
-  if (balance.spentSinceCents === 0) return null;
-  return `Entered ${formatMoney(balance.enteredCents)}, less ${formatMoney(
-    balance.spentSinceCents,
-  )} spent since`;
+export function balanceDebitLabel(
+  balance: Pick<
+    BankBalance,
+    "enteredCents" | "spentSinceCents" | "transfersSinceCents"
+  >,
+) {
+  const transfers = balance.transfersSinceCents;
+  if (balance.spentSinceCents === 0 && transfers === 0) return null;
+  const parts = [
+    balance.spentSinceCents !== 0
+      ? `less ${formatMoney(balance.spentSinceCents)} spent`
+      : null,
+    transfers < 0 ? `less ${formatMoney(-transfers)} moved out` : null,
+    transfers > 0 ? `plus ${formatMoney(transfers)} moved in` : null,
+  ].filter(Boolean);
+  return `Entered ${formatMoney(balance.enteredCents)}, ${parts.join(", ")} since`;
 }

@@ -92,28 +92,48 @@ describe("balanceUpdatedLabel", () => {
 });
 
 describe("balanceDebitLabel", () => {
-  const at = "2026-10-25T20:52:00.000Z";
   it("says what was entered and what has come off since", () => {
     expect(
       plain(
         balanceDebitLabel({
-          balanceCents: 96_000,
           enteredCents: 100_000,
           spentSinceCents: 4_000,
-          updatedAt: at,
+          transfersSinceCents: 0,
         }) ?? "",
       ),
     ).toBe("Entered $1,000.00, less $40.00 spent since");
   });
 
-  it("is empty when nothing has been spent since", () => {
+  it("is empty when nothing has been spent or moved since", () => {
     expect(
       balanceDebitLabel({
-        balanceCents: 100_000,
         enteredCents: 100_000,
         spentSinceCents: 0,
-        updatedAt: at,
+        transfersSinceCents: 0,
       }),
     ).toBeNull();
+  });
+
+  it("includes transfers out and in", () => {
+    expect(
+      plain(
+        balanceDebitLabel({
+          enteredCents: 100_000,
+          spentSinceCents: 4_000,
+          transfersSinceCents: -25_000,
+        }) ?? "",
+      ),
+    ).toBe(
+      "Entered $1,000.00, less $40.00 spent, less $250.00 moved out since",
+    );
+    expect(
+      plain(
+        balanceDebitLabel({
+          enteredCents: 100_000,
+          spentSinceCents: 0,
+          transfersSinceCents: 5_000,
+        }) ?? "",
+      ),
+    ).toBe("Entered $1,000.00, plus $50.00 moved in since");
   });
 });

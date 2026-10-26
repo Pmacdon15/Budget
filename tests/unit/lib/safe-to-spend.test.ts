@@ -38,3 +38,47 @@ describe("safeToSpend", () => {
     ).toMatchObject({ perDayCents: 0 });
   });
 });
+
+describe("safeToSpend held to net chequing", () => {
+  const month = { incomeCents: 300_000, spentCents: 175_000, daysLeft: 5 };
+
+  it("is unchanged with no chequing accounts", () => {
+    expect(safeToSpend({ ...month, netChequingCents: null })).toEqual({
+      leftCents: 125_000,
+      daysLeft: 5,
+      perDayCents: 25_000,
+    });
+  });
+
+  it("is zero, never positive, when net chequing is negative", () => {
+    expect(safeToSpend({ ...month, netChequingCents: -1 })).toEqual({
+      leftCents: 0,
+      daysLeft: 5,
+      perDayCents: 0,
+    });
+    expect(
+      safeToSpend({ ...month, netChequingCents: -50_000 }).perDayCents,
+    ).toBe(0);
+  });
+
+  it("is zero when net chequing is zero", () => {
+    expect(safeToSpend({ ...month, netChequingCents: 0 })).toMatchObject({
+      leftCents: 0,
+      perDayCents: 0,
+    });
+  });
+
+  it("spreads only what chequing holds when that's less than the budget", () => {
+    expect(safeToSpend({ ...month, netChequingCents: 10_000 })).toEqual({
+      leftCents: 10_000,
+      daysLeft: 5,
+      perDayCents: 2_000,
+    });
+  });
+
+  it("keeps the budget when chequing covers it", () => {
+    expect(
+      safeToSpend({ ...month, netChequingCents: 1_000_000 }).perDayCents,
+    ).toBe(25_000);
+  });
+});

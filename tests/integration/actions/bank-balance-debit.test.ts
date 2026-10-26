@@ -31,7 +31,7 @@ const form = (amount: string, description = "Shell"): ExpenseFormValues => ({
 /** Enters a balance and marks it as entered on Oct 1. */
 async function enterBalance(balance: string) {
   await setBankBalance({ balance });
-  await rows("update bank_balances set updated_at = $1 where user_id = $2", [
+  await rows("update accounts set balance_as_of = $1 where user_id = $2", [
     BALANCE_SET_AT,
     "user_a",
   ]);
@@ -156,7 +156,7 @@ describe("bank balance debiting", () => {
     it("uses the day in Regina, not UTC", async () => {
       // 11:30 p.m. on Oct 1 in Regina is already Oct 2 in UTC.
       await setBankBalance({ balance: "1000" });
-      await rows("update bank_balances set updated_at = $1", [
+      await rows("update accounts set balance_as_of = $1", [
         "2026-10-02T05:30:00Z",
       ]);
       await createExpense({ ...form("80"), spentOn: "2026-10-01" });
