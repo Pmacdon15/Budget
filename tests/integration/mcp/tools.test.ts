@@ -58,6 +58,13 @@ describe("list_categories", () => {
     expect(categories.map((c) => c.name)).toContain("Transportation");
     expect(categories[0]).toHaveProperty("examples");
   });
+
+  it("leaves the examples out when asked", () => {
+    const result = listCategories({ include_examples: false });
+    const [first] = result.data.categories as Record<string, unknown>[];
+    expect(first).toHaveProperty("name");
+    expect(first).not.toHaveProperty("examples");
+  });
 });
 
 describe("add_expense", () => {

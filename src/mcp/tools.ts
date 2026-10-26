@@ -52,6 +52,7 @@ import {
   editExpenseInputSchema,
   editFixedBillInputSchema,
   findMatchingFixedBillInputSchema,
+  type ListCategoriesInput,
   listExpensesInputSchema,
   listFixedBillsInputSchema,
   markBillPaidInputSchema,
@@ -170,14 +171,15 @@ function daysAgo(date: string, days: number) {
   return d.toISOString().slice(0, 10);
 }
 
-export function listCategories(): ToolResult {
+export function listCategories(input: ListCategoriesInput = {}): ToolResult {
+  const withExamples = input.include_examples !== false;
   return {
     summary: `${CATEGORIES.length} categories. Use the name, not the label.`,
     data: {
       categories: CATEGORIES.map((c) => ({
         name: c.name,
         label: c.label,
-        examples: c.hint,
+        ...(withExamples ? { examples: c.hint } : {}),
       })),
     },
   };

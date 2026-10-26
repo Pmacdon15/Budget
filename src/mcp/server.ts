@@ -10,6 +10,7 @@ import {
   editExpenseInputSchema,
   editFixedBillInputSchema,
   findMatchingFixedBillInputSchema,
+  listCategoriesInputSchema,
   listExpensesInputSchema,
   listFixedBillsInputSchema,
   markBillPaidInputSchema,
@@ -18,6 +19,7 @@ import {
   unlinkFixedBillInputSchema,
 } from "@/lib/pending-expenses";
 import { MCP_INSTRUCTIONS } from "@/mcp/instructions";
+import { portable } from "@/mcp/portable-schema";
 import {
   addExpense,
   addFixedBill,
@@ -126,9 +128,10 @@ export function registerBudgetTools(server: McpServer) {
       title: "List categories",
       description:
         "The expense categories Budget uses, with examples of what goes in each. Call this before suggesting a category.",
+      inputSchema: portable(listCategoriesInputSchema),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    (ctx) => run(server, ctx.http?.authInfo, () => listCategories()),
+    (args, ctx) => run(server, ctx.http?.authInfo, () => listCategories(args)),
   );
 
   server.registerTool(
@@ -137,7 +140,7 @@ export function registerBudgetTools(server: McpServer) {
       title: "List expenses",
       description:
         "The user's saved expenses and items waiting for review between two dates (default: the last 31 days). Use it to check whether a charge is already recorded and to find an expense's id before editing or deleting it.",
-      inputSchema: listExpensesInputSchema,
+      inputSchema: portable(listExpensesInputSchema),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     (args, ctx) =>
@@ -150,7 +153,7 @@ export function registerBudgetTools(server: McpServer) {
       title: "Add expense for review",
       description:
         "Submits a charge you found (e.g. in an email) to the user's Pending Review list. It does not become an expense until the user approves it in Budget. Before calling, tell the user the merchant, amount and date and the category you suggest, and wait for them to confirm the category. If the answer is status 'possible_duplicate', nothing was saved: ask the user, and only resubmit with allow_duplicate: true if they say it's a separate charge. It also checks the user's fixed bills: status 'matches_fixed_bill' means nothing was saved and the charge looks like one of them; show the user the suggestion, then resubmit with fixed_bill_id (it's that bill) or is_subscription: false (a separate charge). Set is_subscription: true for a subscription with no fixed bill yet, so approving it creates one.",
-      inputSchema: addExpenseInputSchema,
+      inputSchema: portable(addExpenseInputSchema),
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -168,7 +171,7 @@ export function registerBudgetTools(server: McpServer) {
       title: "Set bank balance",
       description:
         "Sets the user's bank balance to what their bank reported (from a low-balance or debit alert, or a statement). It replaces the balance; it never subtracts. Expenses added after this come off it. Don't also add_expense a charge only because a bank alert mentions it.",
-      inputSchema: syncBankBalanceInputSchema,
+      inputSchema: portable(syncBankBalanceInputSchema),
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -188,7 +191,7 @@ export function registerBudgetTools(server: McpServer) {
       title: "Edit a saved expense",
       description:
         "Changes a saved expense. Only use this when the user explicitly asks to change a specific expense; confirm which one first (find its id with list_expenses). Pass only the fields that change.",
-      inputSchema: editExpenseInputSchema,
+      inputSchema: portable(editExpenseInputSchema),
       annotations: {
         readOnlyHint: false,
         destructiveHint: true,
@@ -206,7 +209,7 @@ export function registerBudgetTools(server: McpServer) {
       title: "Delete a saved expense",
       description:
         "Permanently deletes a saved expense. Only use this when the user explicitly asks to delete a specific expense; confirm which one first (find its id with list_expenses). Never use it on your own initiative or to clean up duplicates without asking.",
-      inputSchema: deleteExpenseInputSchema,
+      inputSchema: portable(deleteExpenseInputSchema),
       annotations: {
         readOnlyHint: false,
         destructiveHint: true,
@@ -224,7 +227,7 @@ export function registerBudgetTools(server: McpServer) {
       title: "Mark an expense paid",
       description:
         "Marks an expense that was added as not paid yet (unpaid: true) as paid, when you find its payment (a bank transfer sent, a payment confirmation). From then on it comes off the bank balance. Works on saved expenses and items still waiting for review. Use the date the payment went out.",
-      inputSchema: markExpensePaidInputSchema,
+      inputSchema: portable(markExpensePaidInputSchema),
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -244,7 +247,7 @@ export function registerBudgetTools(server: McpServer) {
       title: "Attach a receipt",
       description:
         "Attaches a receipt from an email to a saved expense (expense_id) or an item waiting for review (pending_id), or replaces the one it has. Send what the receipt says (merchant, date, subtotal, tax, total, text) and, if the email has one, a JPEG of it. For a PDF receipt, send its text and amounts. Replacing a receipt on a split expense changes it for every part.",
-      inputSchema: attachReceiptInputSchema,
+      inputSchema: portable(attachReceiptInputSchema),
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -262,7 +265,7 @@ export function registerBudgetTools(server: McpServer) {
       title: "List fixed bills",
       description:
         "The user's fixed bills (rent, phone, internet, subscriptions) for a month (default: this month), with their ids and whether each is marked paid. Check this before adding a fixed bill or a one-off expense for something that may already be a fixed bill.",
-      inputSchema: listFixedBillsInputSchema,
+      inputSchema: portable(listFixedBillsInputSchema),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     (args, ctx) =>
@@ -275,7 +278,7 @@ export function registerBudgetTools(server: McpServer) {
       title: "Add a fixed bill",
       description:
         "Adds a bill that repeats every month. Only use it when the email clearly says the charge repeats (a subscription, a monthly plan, an auto-renewal) or the user asks for a fixed bill; otherwise use add_expense. Ask the user before adding, e.g. 'Google AI Pro looks monthly. Add it as a fixed bill for $28.34?'.",
-      inputSchema: addFixedBillInputSchema,
+      inputSchema: portable(addFixedBillInputSchema),
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -293,7 +296,7 @@ export function registerBudgetTools(server: McpServer) {
       title: "Edit a fixed bill",
       description:
         "Changes a fixed bill from a month onward, e.g. when a bill email shows a new price. Earlier months keep the old values. Tell the user the old and new amounts and get their OK before calling. Pass only the fields that change.",
-      inputSchema: editFixedBillInputSchema,
+      inputSchema: portable(editFixedBillInputSchema),
       annotations: {
         readOnlyHint: false,
         destructiveHint: true,
@@ -311,7 +314,7 @@ export function registerBudgetTools(server: McpServer) {
       title: "Mark a fixed bill paid",
       description:
         "Marks a fixed bill paid for a month, when you find its payment. Pass paid_on (the day the money left) so it comes off the bank balance like an expense. To merge a saved expense that is this bill's payment, pass expense_id: the expense is linked to the bill and counts once (with update_amount: true the bill also takes that expense's amount, once the user agreed). The bill counts toward the month either way.",
-      inputSchema: markBillPaidInputSchema,
+      inputSchema: portable(markBillPaidInputSchema),
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -329,7 +332,7 @@ export function registerBudgetTools(server: McpServer) {
       title: "Find the fixed bill a charge matches",
       description:
         "Given a charge (merchant, description, amount, date), returns the user's fixed bills it could be, with a score, the amount difference and a suggestion to show the user (e.g. 'Update fixed bill Internet from $80.00 to $85.00 and mark 2026-10 paid?'). Matches on merchant name, then amount (within 15% by default) and billing day. Call it before add_expense or add_fixed_bill for anything that might repeat. Changes nothing.",
-      inputSchema: findMatchingFixedBillInputSchema,
+      inputSchema: portable(findMatchingFixedBillInputSchema),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     (args, ctx) =>
@@ -344,7 +347,7 @@ export function registerBudgetTools(server: McpServer) {
       title: "Turn an expense into a fixed bill",
       description:
         "Makes a saved expense (expense_id) a fixed bill from its month, with that expense linked as the first paid month, so it counts once. For an item waiting for review (pending_id), marks it a subscription: approving it creates the bill. Only after the user said it's a subscription.",
-      inputSchema: convertExpenseToFixedBillInputSchema,
+      inputSchema: portable(convertExpenseToFixedBillInputSchema),
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -364,7 +367,7 @@ export function registerBudgetTools(server: McpServer) {
       title: "Make a charge a normal expense again",
       description:
         "The reverse of linking or converting: a saved expense (expense_id) stops being a fixed bill's payment and counts as normal spending, or an item waiting for review (pending_id) is no longer linked to a bill or marked a subscription. Use it when the user says a charge isn't the subscription (e.g. usage credits). It doesn't delete the bill.",
-      inputSchema: unlinkFixedBillInputSchema,
+      inputSchema: portable(unlinkFixedBillInputSchema),
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,

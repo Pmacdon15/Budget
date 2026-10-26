@@ -224,6 +224,21 @@ export const deleteExpenseInputSchema = z.object({
   id: z.uuid().describe("The expense's id, from list_expenses."),
 });
 
+/**
+ * What `list_categories` takes. Every tool takes at least one parameter: some
+ * clients (Gemini) reject a tool whose parameters are an empty object.
+ */
+export const listCategoriesInputSchema = z.object({
+  include_examples: z
+    .boolean()
+    .optional()
+    .describe(
+      "Include examples of what goes in each category. Defaults to true; pass false for just the names and labels.",
+    ),
+});
+
+export type ListCategoriesInput = z.output<typeof listCategoriesInputSchema>;
+
 export const listExpensesInputSchema = z.object({
   from: isoDate
     .optional()
