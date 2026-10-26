@@ -3,19 +3,31 @@ import type { AuthInfo, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import {
   addExpenseInputSchema,
+  addFixedBillInputSchema,
+  attachReceiptInputSchema,
   deleteExpenseInputSchema,
   editExpenseInputSchema,
+  editFixedBillInputSchema,
   listExpensesInputSchema,
+  listFixedBillsInputSchema,
+  markBillPaidInputSchema,
+  markExpensePaidInputSchema,
   syncBankBalanceInputSchema,
 } from "@/lib/pending-expenses";
 import { MCP_INSTRUCTIONS } from "@/mcp/instructions";
 import {
   addExpense,
+  addFixedBill,
+  attachReceipt,
   deleteExpense,
   editExpense,
+  editFixedBill,
   listCategories,
   listExpenses,
+  listFixedBills,
   type McpCaller,
+  markBillPaid,
+  markExpensePaid,
   syncBankBalance,
   type ToolResult,
 } from "@/mcp/tools";
@@ -193,5 +205,110 @@ export function registerBudgetTools(server: McpServer) {
     },
     (args, ctx) =>
       run(server, ctx.http?.authInfo, (caller) => deleteExpense(caller, args)),
+  );
+
+  server.registerTool(
+    "mark_expense_paid",
+    {
+      title: "Mark an expense paid",
+      description:
+        "Marks an expense that was added as not paid yet (unpaid: true) as paid, when you find its payment (a bank transfer sent, a payment confirmation). From then on it comes off the bank balance. Works on saved expenses and items still waiting for review. Use the date the payment went out.",
+      inputSchema: markExpensePaidInputSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    (args, ctx) =>
+      run(server, ctx.http?.authInfo, (caller) =>
+        markExpensePaid(caller, args),
+      ),
+  );
+
+  server.registerTool(
+    "attach_receipt",
+    {
+      title: "Attach a receipt",
+      description:
+        "Attaches a receipt from an email to a saved expense (expense_id) or an item waiting for review (pending_id), or replaces the one it has. Send what the receipt says (merchant, date, subtotal, tax, total, text) and, if the email has one, a JPEG of it. For a PDF receipt, send its text and amounts. Replacing a receipt on a split expense changes it for every part.",
+      inputSchema: attachReceiptInputSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    (args, ctx) =>
+      run(server, ctx.http?.authInfo, (caller) => attachReceipt(caller, args)),
+  );
+
+  server.registerTool(
+    "list_fixed_bills",
+    {
+      title: "List fixed bills",
+      description:
+        "The user's fixed bills (rent, phone, internet, subscriptions) for a month (default: this month), with their ids and whether each is marked paid. Check this before adding a fixed bill or a one-off expense for something that may already be a fixed bill.",
+      inputSchema: listFixedBillsInputSchema,
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    (args, ctx) =>
+      run(server, ctx.http?.authInfo, (caller) => listFixedBills(caller, args)),
+  );
+
+  server.registerTool(
+    "add_fixed_bill",
+    {
+      title: "Add a fixed bill",
+      description:
+        "Adds a bill that repeats every month. Only use it when the email clearly says the charge repeats (a subscription, a monthly plan, an auto-renewal) or the user asks for a fixed bill; otherwise use add_expense. Ask the user before adding, e.g. 'Google AI Pro looks monthly. Add it as a fixed bill for $28.34?'.",
+      inputSchema: addFixedBillInputSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    (args, ctx) =>
+      run(server, ctx.http?.authInfo, (caller) => addFixedBill(caller, args)),
+  );
+
+  server.registerTool(
+    "edit_fixed_bill",
+    {
+      title: "Edit a fixed bill",
+      description:
+        "Changes a fixed bill from a month onward, e.g. when a bill email shows a new price. Earlier months keep the old values. Tell the user the old and new amounts and get their OK before calling. Pass only the fields that change.",
+      inputSchema: editFixedBillInputSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    (args, ctx) =>
+      run(server, ctx.http?.authInfo, (caller) => editFixedBill(caller, args)),
+  );
+
+  server.registerTool(
+    "mark_bill_paid",
+    {
+      title: "Mark a fixed bill paid",
+      description:
+        "Ticks a fixed bill as paid for a month, when you find its payment confirmation. It's bookkeeping only: the bill counts toward the month either way, and it doesn't change the bank balance.",
+      inputSchema: markBillPaidInputSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    (args, ctx) =>
+      run(server, ctx.http?.authInfo, (caller) => markBillPaid(caller, args)),
   );
 }
