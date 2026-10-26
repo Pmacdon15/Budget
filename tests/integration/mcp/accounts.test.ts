@@ -129,6 +129,19 @@ describe("list_accounts", () => {
     expect(result.summary).toContain("nothing is left to spend");
   });
 
+  it("leaves out proposed accounts when asked", async () => {
+    await proposeAccount(A, {
+      type: "line_of_credit",
+      institution: "Scotiabank",
+      last_four: "4321",
+      balance: 1500,
+    });
+    expect((await listAccounts(A, {})).data.pending_review).toHaveLength(1);
+    expect(
+      (await listAccounts(A, { include_proposed: false })).data.pending_review,
+    ).toEqual([]);
+  });
+
   it("only shows the caller's accounts", async () => {
     await card("user_b");
     expect((await listAccounts(A, {})).data.accounts).toEqual([]);

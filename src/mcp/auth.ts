@@ -1,6 +1,5 @@
 import "server-only";
-import { verifyClerkToken } from "@clerk/mcp-tools/server";
-import { auth } from "@clerk/nextjs/server";
+import { clerkClient } from "@clerk/nextjs/server";
 import type { AuthInfo } from "@modelcontextprotocol/server";
 import { touchApiKey } from "@/db/api-keys";
 import { hashApiKey, looksLikeApiKey } from "@/lib/api-key-token";
@@ -17,7 +16,7 @@ import { hashApiKey, looksLikeApiKey } from "@/lib/api-key-token";
  * the only place tools take the user from.
  */
 export async function verifyMcpToken(
-  _req: Request,
+  req: Request,
   token: string | undefined,
 ): Promise<AuthInfo | undefined> {
   if (!token) return undefined;
@@ -33,6 +32,43 @@ export async function verifyMcpToken(
     };
   }
 
-  const session = await auth({ acceptsToken: "oauth_token" });
-  return verifyClerkToken(session, token);
+  return verifyOAuthToken(req, token);
+}
+
+/**
+ * Asks Clerk about an OAuth access token, opaque (`oat_...`) or JWT, from any
+ * client of this Clerk instance: registered dynamically, by Client ID Metadata
+ * Document, or created in the Clerk dashboard.
+ *
+ * The token is handed to Clerk directly, in a request of its own, instead of
+ * through `auth()`: that reads the Authorization header as the middleware saw
+ * it, which only recognizes the exact spelling "Bearer ", so a client that
+ * writes "bearer" was turned away with a token Clerk would have accepted.
+ */
+async function verifyOAuthToken(
+  req: Request,
+  token: string,
+): Promise<AuthInfo | undefined> {
+  const client = await clerkClient();
+  const state = await client.authenticateRequest(
+    new Request(req.url, { headers: { authorization: `Bearer ${token}` } }),
+    { acceptsToken: "oauth_token" },
+  );
+  const auth = state.toAuth();
+  if (!auth?.isAuthenticated || auth.tokenType !== "oauth_token") {
+    console.warn(
+      `MCP: Clerk rejected an OAuth access token (${state.reason ?? "no reason given"}${state.message ? `: ${state.message}` : ""})`,
+    );
+    return undefined;
+  }
+  if (!auth.userId) {
+    console.warn("MCP: an OAuth access token without a user was rejected");
+    return undefined;
+  }
+  return {
+    token,
+    clientId: auth.clientId ?? "oauth",
+    scopes: auth.scopes ?? [],
+    extra: { userId: auth.userId, via: "oauth", verifiedBy: "clerk" },
+  };
 }

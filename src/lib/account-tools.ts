@@ -80,7 +80,18 @@ const source = z
   .optional()
   .describe("Where it came from, e.g. the email's sender and subject.");
 
-export const listAccountsInputSchema = z.object({});
+/**
+ * What `list_accounts` takes. Like every tool, it has at least one parameter:
+ * some clients (Gemini) reject a tool whose parameters are an empty object.
+ */
+export const listAccountsInputSchema = z.object({
+  include_proposed: z
+    .boolean()
+    .optional()
+    .describe(
+      "Include accounts proposed and waiting for the user's review. Defaults to true.",
+    ),
+});
 
 export const proposeAccountInputSchema = z.object({
   type: accountType,

@@ -181,11 +181,13 @@ export async function listAccounts(
   caller: McpCaller,
   args: unknown,
 ): Promise<ToolResult> {
-  listAccountsInputSchema.parse(args ?? {});
+  const input = listAccountsInputSchema.parse(args ?? {});
   const month = currentMonth();
   const [accounts, pending, overview] = await Promise.all([
     selectAccounts(caller.userId),
-    selectPendingAccounts(caller.userId),
+    input.include_proposed === false
+      ? Promise.resolve([])
+      : selectPendingAccounts(caller.userId),
     buildMonthOverview(caller.userId, month, 1),
   ]);
   const net = netChequingCents(accounts);
