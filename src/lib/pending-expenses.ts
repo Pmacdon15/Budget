@@ -1,6 +1,12 @@
 import { z } from "zod";
 import { CATEGORY_NAMES } from "@/lib/categories";
 import { formatMoney } from "@/lib/money";
+import {
+  MAX_EMAIL_HTML_CHARS,
+  MAX_EMAIL_TEXT_CHARS,
+  type ReceiptFileKind,
+  type ReceiptKind,
+} from "@/lib/receipt-files";
 
 /*
  * Expenses an AI assistant submitted through the MCP server. They wait on the
@@ -27,6 +33,8 @@ export type PendingExpense = {
   unpaid: boolean;
   /** The AI attached a receipt (details read off an email, maybe a photo). */
   hasReceipt: boolean;
+  /** What that receipt shows (photo, PDF, the email, or only details); null with none. */
+  receiptKind?: ReceiptKind | null;
   /** The fixed bill it pays, if the AI matched one: approving marks that month paid. */
   fixedItemId?: string | null;
   fixedItemName?: string | null;
@@ -48,6 +56,20 @@ export type ReceiptDetails = {
   rawText: string | null;
   /** A JPEG photo of the receipt in the private store, when the email had one. */
   imagePathname: string | null;
+  /** The email's PDF attachment, or the email itself, in the private store. */
+  filePathname?: string | null;
+  fileKind?: ReceiptFileKind | null;
+  /** The attachment's name, for downloads. */
+  fileName?: string | null;
+  fileBytes?: number | null;
+  /** Which email it came from. */
+  emailSubject?: string | null;
+  emailFrom?: string | null;
+  emailDate?: string | null;
+  /** The email's Message-ID, normalized: re-attaching the same email is a no-op. */
+  emailMessageId?: string | null;
+  /** sha256 of the file (or email body) that was sent, for the same reason. */
+  contentHash?: string | null;
 };
 
 /** An expense or pending item that looks like a new one: same day, same amount. */
@@ -109,7 +131,61 @@ const nonNegativeDollars = z
 /** About 3MB once decoded, the same limit as a scanned photo. */
 const MAX_IMAGE_BASE64 = 4_200_000;
 
-/** A receipt read off an email: what it says, and optionally a JPEG of it. */
+/** About 3MB once decoded, the same as a photo. */
+const MAX_PDF_BASE64 = 4_200_000;
+
+/** The bill or receipt email itself: who sent it, when, and its body. */
+export const receiptEmailInputSchema = z.object({
+  message_id: z
+    .string()
+    .trim()
+    .max(500, "The message id is too long")
+    .optional()
+    .describe(
+      "The email's Message-ID header (or your email tool's message id). Re-sending the same email with it never saves a second copy.",
+    ),
+  subject: z.string().trim().max(500, "The subject is too long").optional(),
+  from: z
+    .string()
+    .trim()
+    .max(500, "The sender is too long")
+    .optional()
+    .describe("The sender, e.g. 'Rogers <billing@rogers.com>'."),
+  date: z
+    .string()
+    .trim()
+    .max(100, "The date is too long")
+    .optional()
+    .describe("When it was sent, as the email shows it, e.g. 2026-10-20."),
+  html: z
+    .string()
+    .max(
+      MAX_EMAIL_HTML_CHARS,
+      "The email's HTML is too large (1,000,000 characters at most)",
+    )
+    .optional()
+    .describe(
+      "The email's HTML body. Only saved when there is no attachment. Budget removes scripts and remote images before saving it.",
+    ),
+  text: z
+    .string()
+    .max(
+      MAX_EMAIL_TEXT_CHARS,
+      "The email's text is too large (200,000 characters at most)",
+    )
+    .optional()
+    .describe(
+      "The email's plain-text body. Only saved when there is no attachment (and no HTML).",
+    ),
+});
+
+export type ReceiptEmailInput = z.output<typeof receiptEmailInputSchema>;
+
+/**
+ * A receipt read off an email: what it says, plus a copy to keep: a JPEG of
+ * it, the email's PDF attachment, or (when there's no attachment) the email
+ * itself.
+ */
 export const receiptInputSchema = z.object({
   merchant: z.string().trim().max(120).optional(),
   purchased_on: isoDate
@@ -130,7 +206,25 @@ export const receiptInputSchema = z.object({
     .max(MAX_IMAGE_BASE64, "That image is too large (3MB at most)")
     .optional()
     .describe(
-      "A JPEG photo or scan of the receipt, base64-encoded. JPEG only; for a PDF receipt send its text instead.",
+      "A JPEG photo or scan of the receipt, base64-encoded (3MB at most). For a PDF attachment use pdf_base64 instead.",
+    ),
+  pdf_base64: z
+    .string()
+    .max(MAX_PDF_BASE64, "That PDF is too large (3MB at most)")
+    .optional()
+    .describe(
+      "The email's PDF attachment (the bill or receipt), base64-encoded, 3MB at most. Send this or image_jpeg_base64, not both.",
+    ),
+  pdf_filename: z
+    .string()
+    .trim()
+    .max(200, "The file name is too long")
+    .optional()
+    .describe("The attachment's file name, e.g. 'Invoice-1042.pdf'."),
+  email: receiptEmailInputSchema
+    .optional()
+    .describe(
+      "The email the receipt came from. Always send message_id, subject, from and date. When the email has no attachment, also send its html (or text): the email itself is then saved as the receipt.",
     ),
 });
 
@@ -176,7 +270,7 @@ export const addExpenseInputSchema = z.object({
   receipt: receiptInputSchema
     .optional()
     .describe(
-      "The receipt, when the email is one: its details and optionally a JPEG.",
+      "The receipt, when the email is one: its details and a copy to keep (its PDF attachment or a JPEG, or the email itself when there's no attachment).",
     ),
   is_subscription: z
     .union([z.boolean(), z.literal("unknown")])
@@ -233,7 +327,10 @@ export const listExpensesInputSchema = z.object({
     .describe("Last day to include, as YYYY-MM-DD. Defaults to today."),
 });
 
-/** What `attach_receipt` takes: a saved expense or a pending item, and the receipt. */
+/**
+ * What `attach_receipt` takes: where it goes (a saved expense, a pending item,
+ * or a fixed bill's payment for a month) and the receipt.
+ */
 export const attachReceiptInputSchema = receiptInputSchema
   .extend({
     expense_id: z
@@ -246,10 +343,25 @@ export const attachReceiptInputSchema = receiptInputSchema
       .describe(
         "An id from list_expenses' pending_review, or from add_expense.",
       ),
+    fixed_bill_id: z
+      .uuid()
+      .optional()
+      .describe(
+        "A fixed bill's id, from list_fixed_bills, with month: the receipt goes on that month's payment (mark it paid first).",
+      ),
+    month: yearMonth
+      .optional()
+      .describe("With fixed_bill_id: the month that was paid, YYYY-MM."),
   })
   .refine(
-    (value) => Boolean(value.expense_id) !== Boolean(value.pending_id),
-    "Give exactly one of expense_id or pending_id",
+    (value) =>
+      [value.expense_id, value.pending_id, value.fixed_bill_id].filter(Boolean)
+        .length === 1,
+    "Give exactly one of expense_id, pending_id or fixed_bill_id",
+  )
+  .refine(
+    (value) => !value.fixed_bill_id || Boolean(value.month),
+    "Give month (YYYY-MM) with fixed_bill_id",
   );
 
 export const markExpensePaidInputSchema = z.object({

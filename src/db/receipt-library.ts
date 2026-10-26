@@ -1,5 +1,6 @@
 import "server-only";
 import { db, type Row } from "@/db/client";
+import { type ReceiptKind, receiptKindOf } from "@/lib/receipt-files";
 import { containsPattern } from "@/lib/schemas/receipt-library";
 
 /**
@@ -20,6 +21,8 @@ export type ReceiptLibraryEntry = {
   descriptions: string[];
   categories: string[];
   hasPhoto: boolean;
+  /** What it shows: a photo, a PDF or email copy, or only details. */
+  kind: ReceiptKind;
 };
 
 function toDateString(value: unknown): string {
@@ -37,6 +40,7 @@ const toEntry = (r: Row): ReceiptLibraryEntry => ({
   descriptions: (r.descriptions ?? []) as string[],
   categories: (r.categories ?? []) as string[],
   hasPhoto: Boolean(r.has_photo),
+  kind: receiptKindOf({ fileKind: r.file_kind, imagePathname: r.has_photo }),
 });
 
 /**
@@ -53,6 +57,7 @@ export async function selectReceiptLibrary(
   const rows = await db()`
     select r.id, r.merchant, r.purchased_on, r.total_cents, r.tax_cents,
            r.created_at, (r.image_pathname is not null) as has_photo,
+           r.file_kind,
            min(e.spent_on) as spent_on, min(e.month) as month,
            sum(e.amount_cents) as spent_cents,
            coalesce(array_agg(distinct e.description) filter (where e.id is not null), '{}') as descriptions,

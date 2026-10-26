@@ -1,4 +1,5 @@
 import type { Category } from "@/lib/categories";
+import type { ReceiptKind } from "@/lib/receipt-files";
 
 export type FixedItem = {
   id: string;
@@ -37,6 +38,8 @@ export type Expense = {
   receiptId: string | null;
   /** False when the receipt was read off an email and has no photo to open. */
   receiptHasPhoto?: boolean;
+  /** What the receipt shows: a photo, a PDF, the email, or only details. */
+  receiptKind?: ReceiptKind | null;
   /** Not paid yet, so it stays off the bank balance until it's marked paid. */
   unpaid?: boolean;
   /** The fixed bill this expense paid. It counts as that bill, not as extra spending. */

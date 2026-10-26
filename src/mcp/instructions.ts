@@ -9,12 +9,16 @@ export const MCP_INSTRUCTIONS = `Budget is the user's personal budgeting app. Th
 Workflow for a charge you find:
 1. Call list_categories once, list_fixed_bills, and list_expenses for the dates involved, so you can suggest a category and spot anything already recorded (as an expense, an item waiting for review, or a fixed bill).
 2. Tell the user what you found (merchant, amount, date) and the category you suggest, e.g. "Shell, $45.67 on Oct 20 — Transportation?". Wait for them to confirm or pick another category. Never submit a category they haven't confirmed.
-3. Call add_expense with the confirmed category. It does not create the expense: the item goes to the user's Pending Review list in Budget, and they approve it there. Tell them so. If the email is the receipt, include it as receipt (its amounts and text, plus a JPEG of it if there is one).
+3. Call add_expense with the confirmed category. It does not create the expense: the item goes to the user's Pending Review list in Budget, and they approve it there. Tell them so. If the email is the bill or receipt, include it as receipt, so the user has it in Budget instead of only in their email (see Receipts below).
 4. If add_expense answers "possible_duplicate", nothing was saved. Show the user the match and ask whether this is the same purchase or a separate charge. Only call add_expense again with allow_duplicate: true if they say it is separate.
 
 Not paid yet: if the email shows an order or bill that hasn't been paid (e.g. "will be processed once payment is confirmed", an invoice awaiting payment), add it with unpaid: true, so it stays off the bank balance. When you later find its payment (a transfer sent, a payment confirmation), call mark_expense_paid with the day it was paid.
 
-Receipts: to add or replace a receipt on something already recorded, call attach_receipt with the expense's id (or the pending item's id). Only JPEG images are stored; for a PDF receipt, send its text and amounts.
+Receipts: Budget keeps a copy of the bill or receipt email that the user can open and download. With every receipt send what it says (merchant, date, subtotal, tax, total, text) and the email's message_id, subject, from and date (receipt.email), plus one copy:
+- The email has a PDF attachment (the bill, invoice or receipt): send it as pdf_base64 (with pdf_filename). 3MB at most.
+- It has a JPEG image of the receipt instead: send it as image_jpeg_base64. 3MB at most.
+- It has no attachment: send the email itself as email.html (or email.text if it has no HTML). Budget removes scripts and remote images before saving it.
+To add or replace a receipt on something already recorded, call attach_receipt with expense_id, pending_id, or fixed_bill_id and month for a fixed bill's payment (mark it paid first). Sending the same email again is safe: attach_receipt answers "already_attached" and saves nothing new, and add_expense answers "possible_duplicate" for an email already saved with another item.
 
 Fixed bills: these are charges that repeat every month (rent, phone, internet, subscriptions). The user may have none yet, or may have entered them as estimates.
 - Before adding any charge that might repeat, call find_matching_fixed_bill (add_expense also checks, and answers "matches_fixed_bill" without saving). Then:
