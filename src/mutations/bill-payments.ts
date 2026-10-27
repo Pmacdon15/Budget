@@ -4,7 +4,13 @@ import { useMutation } from "@tanstack/react-query";
 import { markBillPaid, unmarkBillPaid } from "@/actions/bill-payments";
 import { type ActionError, unwrap } from "@/mutations/action-error";
 
-type Variables = { fixedItemId: string; month: string; paid: boolean };
+type Variables = {
+  fixedItemId: string;
+  month: string;
+  paid: boolean;
+  /** Only used when marking paid: whether the money came off the bank account. */
+  offBankAccount?: boolean;
+};
 
 /** Marks a bill paid for a month (`paid: true`) or takes the mark off. */
 export function useSetBillPaid() {
