@@ -16,11 +16,11 @@ import {
   incomeDuplicateMessage,
   listIncomeInputSchema,
 } from "@/lib/pending-income";
-import { receiptKindLabel } from "@/lib/receipt-files";
 import {
   friendly,
   preparedKind,
   prepareReceipt,
+  receiptNote,
   storePreparedReceipt,
 } from "@/mcp/receipts";
 import type { McpCaller, ToolResult } from "@/mcp/tools";
@@ -114,7 +114,7 @@ async function addIncomeFor(
   });
   const into = input.account_id ? "the account you named" : "primary chequing";
   return {
-    summary: `Sent to Pending Review: ${input.payer}, $${input.amount.toFixed(2)} received on ${input.date}. The user approves it in Budget at ${REVIEW_URL}; it then counts as take-home for ${input.date.slice(0, 7)} and goes into ${into}.${prepared ? ` Receipt attached (${receiptKindLabel(preparedKind(prepared))}).` : ""}`,
+    summary: `Sent to Pending Review: ${input.payer}, $${input.amount.toFixed(2)} received on ${input.date}. The user approves it in Budget at ${REVIEW_URL}; it then counts as take-home for ${input.date.slice(0, 7)} and goes into ${into}.${prepared ? ` ${receiptNote(prepared)}` : ""}`,
     data: {
       status: "pending_review",
       id,

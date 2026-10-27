@@ -3,11 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GET as getImage } from "@/app/api/receipts/[id]/image/route";
 import { POST as scan } from "@/app/api/receipts/route";
 import { insertExpenseWithReceipt, selectExpensesBetween } from "@/db/expenses";
+import type * as ReceiptStore from "@/lib/receipt-store";
 import { putReceiptImage } from "@/lib/receipt-store";
 import { signInAs, signOut } from "./../helpers/auth";
 import { rows } from "./../helpers/test-db";
 
-vi.mock("@/lib/receipt-store", () => ({
+vi.mock("@/lib/receipt-store", async (importOriginal) => ({
+  // Reads go through the real code, over the mocked `get` below.
+  readReceiptFile: (await importOriginal<typeof ReceiptStore>())
+    .readReceiptFile,
   putReceiptImage: vi.fn(),
   readReceiptImage: vi.fn(),
   deleteReceiptImage: vi.fn(),
