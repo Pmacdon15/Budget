@@ -23,7 +23,7 @@ export default function ReviewPage({
     <>
       <PageHeader
         title="Review"
-        description="Expenses and new accounts your AI assistant found. Nothing counts until you approve it."
+        description="Expenses, income and new accounts your AI assistant found. Nothing counts until you approve it."
       />
       <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
         <Suspense fallback={<ListSkeleton rows={3} />}>

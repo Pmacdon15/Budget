@@ -58,6 +58,7 @@ describe("Budget MCP server", () => {
     expect([...tools.keys()].sort()).toEqual([
       "add_expense",
       "add_fixed_bill",
+      "add_income",
       "attach_receipt",
       "convert_expense_to_fixed_bill",
       "delete_expense",
@@ -68,6 +69,7 @@ describe("Budget MCP server", () => {
       "list_categories",
       "list_expenses",
       "list_fixed_bills",
+      "list_income",
       "mark_bill_paid",
       "mark_expense_paid",
       "propose_account",
@@ -91,6 +93,7 @@ describe("Budget MCP server", () => {
       "list_expenses",
       "list_fixed_bills",
       "list_accounts",
+      "list_income",
     ]) {
       expect(tools.get(name)?.annotations?.readOnlyHint, name).toBe(true);
     }
@@ -128,6 +131,7 @@ describe("Budget MCP server", () => {
       "update_account_balance",
       "record_statement",
       "record_transfer",
+      "add_income",
     ]) {
       expect(tools.get(name)?.annotations?.readOnlyHint, name).toBe(false);
       expect(tools.get(name)?.annotations?.destructiveHint, name).toBe(false);
@@ -215,6 +219,23 @@ describe("server instructions", () => {
     [
       "ask when unsure which account",
       /aren't sure which account.*ask the user/,
+    ],
+    ["check list_income before adding income", /Call list_income/],
+    [
+      "confirm income with the user before add_income",
+      /add it as income\?". Wait for them to confirm/,
+    ],
+    [
+      "send income to review with the email as its receipt",
+      /add_income [\s\S]*the email as receipt[\s\S]*Pending Review/,
+    ],
+    [
+      "look in the folders the user points to",
+      /every folder or label the user points you to/,
+    ],
+    [
+      "only count money that came in as income",
+      /Only money that came in is income/,
     ],
   ])("tell the AI to %s", (_rule, pattern) => {
     expect(MCP_INSTRUCTIONS).toMatch(pattern);

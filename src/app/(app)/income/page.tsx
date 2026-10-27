@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/empty-state";
 import { IncomeDialog } from "@/components/forms/income-dialog";
 import { IncomeActions } from "@/components/income-actions";
 import { PageHeader } from "@/components/page-header";
+import { ReceiptLinks, receiptFileHref } from "@/components/receipt-links";
 import { RecurringIncomeCard } from "@/components/recurring-income/recurring-income-card";
 import {
   ActionsSkeleton,
@@ -293,9 +294,22 @@ async function Deposits({ month }: MonthProp) {
       {income.map((entry) => (
         <li key={entry.id} className="flex items-center gap-3 py-2.5 text-sm">
           <div className="min-w-0">
-            <div className="truncate font-medium">{entry.label}</div>
+            <div className="flex items-center gap-1.5">
+              <span className="truncate font-medium">{entry.label}</span>
+              {entry.receiptId && entry.receiptKind ? (
+                <ReceiptLinks
+                  href={receiptFileHref(entry.receiptId, entry.receiptKind)}
+                  photoHref={`/api/receipts/${entry.receiptId}/image`}
+                  kind={entry.receiptKind}
+                  label={entry.label}
+                />
+              ) : null}
+            </div>
             <div className="text-muted-foreground text-xs">
               {entry.receivedOn ?? "No date"}
+              {entry.payer && entry.payer !== entry.label
+                ? ` · ${entry.payer}`
+                : ""}
             </div>
           </div>
           <span className="ml-auto font-medium tabular-nums">

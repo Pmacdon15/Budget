@@ -26,12 +26,17 @@ import {
   unlinkFixedBillInputSchema,
 } from "@/lib/pending-expenses";
 import {
+  addIncomeInputSchema,
+  listIncomeInputSchema,
+} from "@/lib/pending-income";
+import {
   listAccounts,
   proposeAccount,
   recordStatement,
   recordTransfer,
   updateAccountBalance,
 } from "@/mcp/account-tools";
+import { addIncome, listIncome } from "@/mcp/income-tools";
 import { MCP_INSTRUCTIONS } from "@/mcp/instructions";
 import { portable } from "@/mcp/portable-schema";
 import {
@@ -394,6 +399,37 @@ export function registerBudgetTools(server: McpServer) {
         unlinkFixedBill(caller, args),
       ),
   );
+  server.registerTool(
+    "add_income",
+    {
+      title: "Add income for review",
+      description:
+        "Submits money the user received that you found (e.g. in an email): an Interac e-Transfer someone sent them, a direct deposit, a client's payment. It goes to the user's Pending Review list; approving it in Budget makes it take-home for that month and adds it to the account it went into (primary chequing unless you pass account_id). Before calling, tell the user who paid, the amount and date, and wait for them to confirm it's income. Only money that came in: an e-Transfer the user sent is spending (add_expense, or mark_bill_paid when it pays a bill), and money moved between their own accounts is record_transfer. Include the email as receipt (an e-Transfer notice has no attachment, so send the email itself as receipt.email.html or text). If the answer is status 'possible_duplicate', nothing was saved: ask the user, and only resubmit with allow_duplicate: true if they say it's a separate payment.",
+      inputSchema: portable(addIncomeInputSchema),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    (args, ctx) =>
+      run(server, ctx.http?.authInfo, (caller) => addIncome(caller, args)),
+  );
+
+  server.registerTool(
+    "list_income",
+    {
+      title: "List income",
+      description:
+        "The user's take-home entries and income waiting for review between two dates (default: the last 31 days), with who paid, the amount, the account and whether each has a receipt. Use it to check whether a payment is already recorded before add_income.",
+      inputSchema: portable(listIncomeInputSchema),
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    (args, ctx) =>
+      run(server, ctx.http?.authInfo, (caller) => listIncome(caller, args)),
+  );
+
   server.registerTool(
     "list_accounts",
     {

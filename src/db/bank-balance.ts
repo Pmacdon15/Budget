@@ -29,6 +29,7 @@ export async function selectBankBalance(
     enteredCents: primary.enteredCents,
     spentSinceCents: primary.spentSinceCents,
     transfersSinceCents: primary.transfersSinceCents,
+    depositsSinceCents: primary.depositsSinceCents ?? 0,
     updatedAt: primary.balanceAsOf,
   };
 }

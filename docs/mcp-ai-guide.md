@@ -1,6 +1,6 @@
 # Using Budget from an AI assistant
 
-Budget has an MCP server at **`https://budget.patmac.ca/api/mcp`**. Connect it to Claude, Muse, Gemini or any other app that supports MCP connectors, and your assistant can go through your email for bills, receipts, orders, payment confirmations and bank alerts and record them in Budget for you.
+Budget has an MCP server at **`https://budget.patmac.ca/api/mcp`**. Connect it to Claude, Muse, Gemini or any other app that supports MCP connectors, and your assistant can go through your email for bills, receipts, orders, payment confirmations, e-Transfers and deposits you received, and bank alerts, and record them in Budget for you.
 
 This guide explains how the assistant is meant to use it. The same rules are sent to every assistant automatically when it connects (the server's MCP `instructions`, in `src/mcp/instructions.ts`), so you don't need to paste anything. It's here so you know what to expect, and so you can paste it into an assistant that doesn't pick up server instructions.
 
@@ -39,6 +39,18 @@ The app then signs you in to Budget like any other. If it can't do OAuth at all,
 12. **Edit and delete only when asked.** `edit_expense`, `delete_expense` and `edit_fixed_bill` are only for when the user explicitly asks or agrees to change a specific item. Find its id with `list_expenses` or `list_fixed_bills` and confirm which one first. They're marked destructive, so most apps ask permission before running them.
 13. **Never invent anything.** Use amounts exactly as written, in dollars (`45.67`), dates as `YYYY-MM-DD` and months as `YYYY-MM`. If the email doesn't say, ask or skip it. Refunds aren't new expenses. Transfers between your own accounts and credit card or line of credit payments aren't expenses either: they're recorded with `record_transfer`.
 14. **Say where it came from.** Pass a short `source` (sender and subject) with each `add_expense`, so the user can tell what it was when reviewing.
+
+## Income
+
+Money you received (an Interac e-Transfer someone sent you, a direct deposit, a client paying you) is take-home, not spending. The assistant records it the same careful way as a charge:
+
+1. **Look first.** It calls `list_income` for the dates involved, so a payment that's already in Take-home (or waiting on Review) isn't added again. It looks in any folder or label you point it to, not only your inbox (payments from one client are often filed together).
+2. **Confirm with you.** *"DRIFT LANDSCAPING LTD sent you $1,450.00 on Oct 14 — add it as income?"* A friend paying you back, or money moved from your own account, isn't income: say so and it skips it (or uses `record_transfer` for your own accounts).
+3. **`add_income` goes to review.** It sends who paid (`payer`), `amount`, `date`, an optional `label` for the Take-home page, a `source`, and the email itself as `receipt` (an e-Transfer notice has no attachment, so the email is the copy kept). Nothing counts until you approve it on **Review**.
+4. **Approving adds it to Take-home and to your account.** It becomes a take-home entry for its month, with the email saved as its receipt (open or download it on Take-home or in Receipts), deposited into your primary chequing account, or the chequing or savings account the assistant named with `account_id`. Only deposits dated after your balance was last entered or reported change that balance, so adding January's pay in October never throws October's balance off.
+5. **Duplicates.** The same amount on the same day, or an email already saved with other income, answers `possible_duplicate` without saving. A *"you have money waiting"* notice and its *"deposited"* confirmation are one payment.
+
+Only money that came **in** is income. An e-Transfer you sent is spending (`add_expense`), or a bill's payment (`mark_bill_paid`) when its message names the bill.
 
 ## Accounts and statements
 
@@ -79,6 +91,8 @@ In Budget, receipts show next to the expense on **Spending**, the item on **Revi
 | `list_fixed_bills` | Fixed bills for a month (default: this month), with ids, whether each is marked paid or an estimate, its amount history, when it was last charged, and saved expenses that look like it but aren't linked | No |
 | `find_matching_fixed_bill` | Which fixed bills a charge (`merchant`, `description`, `amount`, `date`) could be, with a score, the amount difference and a suggestion to show the user | No |
 | `add_expense` | Sends a charge to Pending Review: `amount`, `date`, `merchant`, `category`, optional `description`, `source`, `unpaid`, `receipt`, `allow_duplicate`, `fixed_bill_id` (it's that bill's payment), `is_subscription` | Adds to review only |
+| `list_income` | Take-home entries and income waiting for review between two dates (default: the last 31 days), with who paid, the account and whether each has a receipt | No |
+| `add_income` | Sends money you received to Pending Review: `amount`, `date`, `payer`, optional `label`, `account_id`, `source`, `receipt`, `allow_duplicate`. Approving makes it take-home and deposits it | Adds to review only |
 | `mark_expense_paid` | Marks an unpaid expense (or pending item) paid on `paid_on`, so it comes off the balance | Yes |
 | `attach_receipt` | Adds or replaces a receipt on an expense (`expense_id`), pending item (`pending_id`) or fixed bill payment (`fixed_bill_id` + `month`): its details plus a JPEG, the email's PDF, or the email itself. The same email again answers `already_attached` | Yes |
 | `sync_bank_balance` | Sets the bank balance (your primary chequing account, the one expenses come off) to what the bank reported: `balance` (negative when overdrawn), optional `source` | Yes |
@@ -108,6 +122,8 @@ In Budget, receipts show next to the expense on **Spending**, the item on **Revi
 **A subscription and a price change.** A Google Play email says your Google AI Pro subscription *"continues and you've been charged"* $28.34. Nothing in `list_fixed_bills` matches, so the assistant asks: *"Google AI Pro looks monthly. Add it as a fixed bill for $28.34?"* Next month, your internet bill email shows $95.00 where your fixed bill says $85.00. The assistant asks *"Your internet went up from $85.00 to $95.00 — update it from November?"*. On a yes, it calls `edit_fixed_bill` with `from_month: "2026-11"` and `amount: 95`.
 
 **Rent by e-Transfer.** You send your landlord $1,500 by e-Transfer with the message *"rent"*. The assistant finds your Rent fixed bill ($1,500, Housing) and calls `mark_bill_paid` for October, so it's ticked off on Budget's bills. Nothing is added as an expense, because rent is already counted as a fixed bill.
+
+**A client paying you by e-Transfer.** Your *Drift* label holds a year of *"DRIFT LANDSCAPING LTD sent you $…"* emails from Interac. The assistant calls `list_income` for the year, then asks you to confirm the payments it found. For each one you OK, it calls `add_income` with `payer: "DRIFT LANDSCAPING LTD"`, the amount and date from the email, and the email itself as `receipt.email`. They wait on Review; once approved, each is take-home for its month with its email saved as the receipt. If it runs again later, the same emails answer `possible_duplicate` and nothing is added twice.
 
 **A bank low-balance alert.** Your bank emails *"Your chequing balance is $412.08."* The assistant calls `sync_bank_balance` with `balance: 412.08`. Budget's bank balance becomes $412.08, and expenses dated that day or later come off it as they're added. It doesn't add the charges the alert mentions as new expenses.
 

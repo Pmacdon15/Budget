@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { getPendingAccounts } from "@/dal/accounts";
 import { getPendingExpenses } from "@/dal/pending-expenses";
+import { getPendingIncome } from "@/dal/pending-income";
 import {
   accountSubtitle,
   isDebtType,
@@ -17,8 +18,10 @@ import {
 import { categoryLabel } from "@/lib/categories";
 import { formatMoney } from "@/lib/money";
 import type { PendingExpense } from "@/lib/pending-expenses";
+import type { PendingIncome } from "@/lib/pending-income";
 import { PendingAccountActions } from "./pending-account-actions";
 import { PendingActions } from "./pending-actions";
+import { PendingIncomeActions } from "./pending-income-actions";
 
 const dateLabel = new Intl.DateTimeFormat("en-CA", {
   month: "short",
@@ -31,22 +34,23 @@ const day = (date: string) => dateLabel.format(new Date(`${date}T00:00:00Z`));
 
 /**
  * What AI apps submitted, waiting for approval: new accounts they proposed,
- * then expenses. Waits for the URL, then reads.
+ * then income, then expenses. Waits for the URL, then reads.
  */
 export async function PendingList({ month }: { month: Promise<string> }) {
   await month;
-  const [items, accounts] = await Promise.all([
+  const [items, accounts, income] = await Promise.all([
     getPendingExpenses(),
     getPendingAccounts(),
+    getPendingIncome(),
   ]);
-  const count = items.length + accounts.length;
+  const count = items.length + accounts.length + income.length;
 
   if (count === 0) {
     return (
       <EmptyState
         icon={Inbox}
         title="Nothing to review"
-        description="When your AI assistant finds a bill, receipt or order in your email, it shows up here for you to approve before it counts."
+        description="When your AI assistant finds a bill, receipt, order or payment you received in your email, it shows up here for you to approve before it counts."
       />
     );
   }
@@ -60,6 +64,9 @@ export async function PendingList({ month }: { month: Promise<string> }) {
       </p>
       {accounts.map((account) => (
         <PendingAccountRow key={account.id} item={account} />
+      ))}
+      {income.map((item) => (
+        <PendingIncomeRow key={item.id} item={item} />
       ))}
       {items.map((item) => (
         <PendingRow key={item.id} item={item} />
@@ -123,6 +130,54 @@ function PendingRow({ item }: { item: PendingExpense }) {
             {formatMoney(item.amountCents)}
           </p>
           <PendingActions item={item} />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Money the user received (an e-Transfer, a deposit), to add to take-home. */
+function PendingIncomeRow({ item }: { item: PendingIncome }) {
+  return (
+    <Card size="sm">
+      <CardContent className="flex flex-wrap items-center justify-between gap-3">
+        <div className="grid min-w-0 gap-1">
+          <p className="flex flex-wrap items-center gap-2 font-medium">
+            <span className="truncate">{item.label}</span>
+            <Badge variant="secondary">Income</Badge>
+            {item.possibleDuplicate ? (
+              <Badge variant="outline">Possible duplicate</Badge>
+            ) : null}
+            {item.hasReceipt ? (
+              <Badge variant="outline">
+                Receipt attached
+                {item.receiptKind && item.receiptKind !== "details" ? (
+                  <ReceiptLinks
+                    href={pendingReceiptFileHref(item.id, item.receiptKind)}
+                    kind={item.receiptKind}
+                    label={item.label}
+                  />
+                ) : null}
+              </Badge>
+            ) : null}
+          </p>
+          <p className="text-muted-foreground text-sm">
+            {day(item.receivedOn)}
+            {item.payer && item.payer !== item.label ? ` · ${item.payer}` : ""}
+            {` · into ${item.accountName ?? "your main chequing"}`}
+            {item.client ? ` · from ${item.client}` : ""}
+          </p>
+          {item.source ? (
+            <p className="truncate text-muted-foreground text-xs">
+              {item.source}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex items-center gap-3">
+          <p className="font-semibold text-emerald-700 tabular-nums dark:text-emerald-400">
+            +{formatMoney(item.amountCents)}
+          </p>
+          <PendingIncomeActions item={item} />
         </div>
       </CardContent>
     </Card>

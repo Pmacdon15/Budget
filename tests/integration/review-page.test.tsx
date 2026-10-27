@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createApiKey } from "@/actions/api-keys";
 import ReviewPage from "@/app/(app)/review/page";
 import { insertPendingExpense } from "@/db/pending-expenses";
+import { insertPendingIncome } from "@/db/pending-income";
 import { signInAs } from "../helpers/auth";
 import {
   pendingSearchParams,
@@ -46,6 +47,51 @@ describe("Review page", () => {
     expect(text).toContain("Email from receipts@shell.ca: Your receipt");
     expect(text).toContain("Approve");
     expect(text).not.toContain("Possible duplicate");
+  });
+
+  it("shows income an AI found, as money in, with its payer and account", async () => {
+    await insertPendingIncome("user_a", {
+      receivedOn: "2026-10-14",
+      label: "Drift Landscaping",
+      payer: "DRIFT LANDSCAPING LTD",
+      amountCents: 145_000,
+      accountId: null,
+      source:
+        "notify@payments.interac.ca: DRIFT LANDSCAPING LTD sent you $1,450.00",
+      client: "Claude",
+      receipt: null,
+    });
+    await item();
+    const text = await render();
+    expect(text).toContain("2 items are waiting for you.");
+    expect(text).toContain("Drift Landscaping");
+    expect(text).toContain("Income");
+    expect(text).toContain("+$1,450.00");
+    expect(text).toContain("Oct 14, 2026");
+    expect(text).toContain("DRIFT LANDSCAPING LTD");
+    expect(text).toContain("into your main chequing");
+    expect(text).toContain("Add income");
+    expect(text).not.toContain("Possible duplicate");
+
+    signInAs("user_b");
+    expect(await render()).not.toContain("Drift Landscaping");
+  });
+
+  it("flags income that matches take-home already saved", async () => {
+    await insertPendingIncome("user_a", {
+      receivedOn: "2026-10-14",
+      label: "Drift Landscaping",
+      payer: null,
+      amountCents: 145_000,
+      accountId: null,
+      source: null,
+      client: null,
+      receipt: null,
+    });
+    await rows(
+      "insert into income (user_id, month, label, amount_cents, received_on) values ('user_a', '2026-10', 'Drift', 145000, '2026-10-14')",
+    );
+    expect(await render()).toContain("Possible duplicate");
   });
 
   it("flags an item that matches a saved expense", async () => {

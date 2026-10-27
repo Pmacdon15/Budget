@@ -25,6 +25,11 @@ export type IncomeEntry = {
   label: string;
   amountCents: number;
   receivedOn: string | null;
+  /** Who paid it, when an AI recorded it from an email. */
+  payer?: string | null;
+  /** The receipt it came with (e.g. the e-Transfer email), if any. */
+  receiptId?: string | null;
+  receiptKind?: ReceiptKind | null;
 };
 
 export type Expense = {

@@ -39,7 +39,8 @@ export type BankBalance = {
   accountName: string;
   /**
    * What's in the account now: the entered balance less the expenses added
-   * since, adjusted by transfers since. Below zero when overdrawn.
+   * since, adjusted by transfers since, plus take-home deposited since.
+   * Below zero when overdrawn.
    */
   balanceCents: number;
   /** The balance as the user (or their AI) last entered it. */
@@ -48,6 +49,8 @@ export type BankBalance = {
   spentSinceCents: number;
   /** Transfers since it was entered: positive when money came in. */
   transfersSinceCents: number;
+  /** Take-home deposited into it since it was entered. */
+  depositsSinceCents?: number;
   /** When it was last entered, as an ISO timestamp. */
   updatedAt: string;
 };
@@ -74,17 +77,24 @@ export function balanceUpdatedLabel(updatedAt: string) {
 export function balanceDebitLabel(
   balance: Pick<
     BankBalance,
-    "enteredCents" | "spentSinceCents" | "transfersSinceCents"
+    | "enteredCents"
+    | "spentSinceCents"
+    | "transfersSinceCents"
+    | "depositsSinceCents"
   >,
 ) {
   const transfers = balance.transfersSinceCents;
-  if (balance.spentSinceCents === 0 && transfers === 0) return null;
+  const deposits = balance.depositsSinceCents ?? 0;
+  if (balance.spentSinceCents === 0 && transfers === 0 && deposits === 0) {
+    return null;
+  }
   const parts = [
     balance.spentSinceCents !== 0
       ? `less ${formatMoney(balance.spentSinceCents)} spent`
       : null,
     transfers < 0 ? `less ${formatMoney(-transfers)} moved out` : null,
     transfers > 0 ? `plus ${formatMoney(transfers)} moved in` : null,
+    deposits > 0 ? `plus ${formatMoney(deposits)} deposited` : null,
   ].filter(Boolean);
   return `Entered ${formatMoney(balance.enteredCents)}, ${parts.join(", ")} since`;
 }
