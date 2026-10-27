@@ -11,6 +11,7 @@ import {
 import { getApiKeys } from "@/dal/api-keys";
 import { CopyButton } from "./copy-button";
 import { CreateKeyDialog } from "./create-key-dialog";
+import { GeminiSteps } from "./gemini-steps";
 import { RevokeKeyButton } from "./revoke-key-button";
 
 export const MCP_URL = "https://budget.patmac.ca/api/mcp";
@@ -53,6 +54,7 @@ export function ConnectAiCard({ month }: { month: Promise<string> }) {
             Whatever it finds lands here for you to approve before it counts.
           </li>
         </ol>
+        <GeminiSteps />
         <div className="grid gap-2 border-t pt-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-muted-foreground">

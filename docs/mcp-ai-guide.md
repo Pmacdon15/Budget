@@ -23,6 +23,23 @@ Claude, ChatGPT and Gemini register themselves with Budget's sign-in (Clerk) aut
 
 The app then signs you in to Budget like any other. If it can't do OAuth at all, use an API key as above.
 
+### Gemini
+
+Gemini's custom apps (gemini.google.com and the Gemini phone app, with a personal Google account) connect with just the URL:
+
+1. On gemini.google.com, open **Settings → Connected Apps** (under **Personal Intelligence** if you don't see it), then **Add a custom app**.
+2. Paste `https://budget.patmac.ca/api/mcp` and leave **Advanced features** empty. Gemini registers itself with Budget's sign-in (Clerk's dynamic client registration). Budget tells it which scopes to ask for: `profile email offline_access`. `offline_access` gets Gemini the refresh token Google's account linking needs.
+3. Accept Google's notice, choose **Link account**, sign in with your Budget account and select **Allow** on the consent screen.
+4. In a chat, type **@** and pick Budget. A Gemini routine can then read your Gmail and send what it finds to **Review**, like any other assistant.
+
+If Gemini asks for credentials under **Advanced features** anyway, it needs an OAuth client created for it in Clerk by Budget's owner (Gemini sends each Google account back to its own redirect URI, `https://oauth-redirect.googleusercontent.com/r/user_bound_custom-mcp-<id>-budget_patmac_ca`, so such a client is set up per person). Enter the **Client ID** and **Client secret** from that client, and:
+
+- **Authorization URL:** `https://clerk.budget.patmac.ca/oauth/authorize`
+- **Token URL:** `https://clerk.budget.patmac.ca/oauth/token`
+- **Scopes:** `profile email offline_access`
+
+The Review page shows the same steps under **Using Gemini?**, with the URLs of the sign-in server the deployment uses. Google offers custom apps to adults with a personal Google account and Keep Activity on, in English; check [Google's help page](https://support.google.com/gemini/answer/17209137) for where they're available.
+
 ## The rules
 
 1. **Look first.** Call `list_categories` once, plus `list_fixed_bills` and `list_expenses` for the dates involved, to suggest a category and spot anything already recorded: an expense, an item waiting for review, or a fixed bill.

@@ -1,4 +1,7 @@
 import { mcpResourceUrl } from "@/mcp/http";
+import { MCP_SCOPES } from "@/mcp/oauth-config";
+
+export { clerkIssuer, configuredIssuer } from "@/mcp/oauth-config";
 
 /*
  * OAuth discovery documents for MCP clients. The authorization server is this
@@ -19,32 +22,19 @@ export function metadataPreflight() {
   return new Response(null, { status: 204, headers: METADATA_CORS_HEADERS });
 }
 
-/** The Clerk Frontend API URL (the OAuth issuer) encoded in a publishable key. */
-export function clerkIssuer(publishableKey: string) {
-  const encoded = publishableKey
-    .replace(/^pk_(test|live)_/, "")
-    .replace(/-/g, "+")
-    .replace(/_/g, "/");
-  const host = atob(encoded.padEnd(Math.ceil(encoded.length / 4) * 4, "="))
-    .replace(/\$$/, "")
-    .trim();
-  return `https://${host}`;
-}
-
-export function configuredIssuer() {
-  const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-  return publishableKey ? clerkIssuer(publishableKey) : null;
-}
-
 /**
  * Protected Resource Metadata (RFC 9728) for the MCP endpoint. Only the
  * standard fields: `resource` is the exact URL clients connect to (and send
- * as the RFC 8707 resource indicator), and `authorization_servers` is Clerk.
+ * as the RFC 8707 resource indicator), `authorization_servers` is Clerk, and
+ * `scopes_supported` is what a client should ask for: clients such as Gemini
+ * register and sign in with exactly these, and `offline_access` gets them the
+ * refresh token Google's account linking requires.
  */
 export function protectedResourceMetadata(req: Request, issuer: string) {
   return {
     resource: mcpResourceUrl(req),
     authorization_servers: [issuer],
+    scopes_supported: [...MCP_SCOPES],
     bearer_methods_supported: ["header"],
     resource_name: "Budget",
     resource_documentation: "https://budget.patmac.ca/review",
