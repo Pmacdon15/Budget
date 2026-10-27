@@ -19,19 +19,19 @@ import {
   type ReceiptInput,
   toCents,
 } from "@/lib/pending-expenses";
+import { decodeBase64File } from "@/lib/receipt-bytes";
 import {
   EMAIL_CONTENT_TYPE,
-  isPdf,
   MAX_PDF_BYTES,
   newReceiptFilePathname,
   normalizeMessageId,
   PDF_CONTENT_TYPE,
   type ReceiptFileKind,
   type ReceiptKind,
+  receiptKindLabel,
 } from "@/lib/receipt-files";
 import {
   IMAGE_CONTENT_TYPE,
-  isJpeg,
   MAX_IMAGE_BYTES,
   newReceiptImagePathname,
 } from "@/lib/receipt-image";
@@ -72,13 +72,15 @@ export type PreparedReceipt = {
     body: Uint8Array | string;
     bytes: number;
   } | null;
+  /**
+   * Why the PDF or JPEG that was sent wasn't kept, when the email itself was
+   * saved instead. Null when the copy sent is the one saved.
+   */
+  fallback: string | null;
 };
 
 const sha256 = (value: Uint8Array | string) =>
   createHash("sha256").update(value).digest("hex");
-
-const decode = (base64: string) =>
-  new Uint8Array(Buffer.from(base64, "base64"));
 
 const orNull = (value: string | undefined) => value?.trim() || null;
 
@@ -117,39 +119,54 @@ export function prepareReceipt(input: ReceiptInput): PreparedReceipt {
 
   let image: Uint8Array | null = null;
   let file: PreparedReceipt["file"] = null;
+  let fallback: string | null = null;
+  const hasEmailBody = Boolean(email?.html?.trim() || email?.text?.trim());
+
+  /*
+   * A PDF or JPEG that can't be used is refused, unless the email itself was
+   * sent too: then the email is saved instead, so the item still gets a
+   * receipt to open, and the answer says why.
+   */
+  const unusable = (problem: string) => {
+    if (!hasEmailBody) throw new ToolInputError(problem);
+    fallback = problem;
+  };
 
   if (input.image_jpeg_base64) {
-    image = decode(input.image_jpeg_base64);
-    if (!isJpeg(image)) {
-      throw new ToolInputError(
+    const jpeg = decodeBase64File(input.image_jpeg_base64, "jpeg");
+    if (!jpeg) {
+      unusable(
         "The image isn't a JPEG. For a PDF attachment use pdf_base64; with no attachment send the email itself as email.html or email.text.",
       );
+    } else if (jpeg.length > MAX_IMAGE_BYTES) {
+      unusable("The image is larger than 3MB.");
+    } else {
+      image = jpeg;
+      details.contentHash = sha256(image);
     }
-    if (image.length > MAX_IMAGE_BYTES) {
-      throw new ToolInputError("The image is larger than 3MB.");
-    }
-    details.contentHash = sha256(image);
   } else if (input.pdf_base64) {
-    const pdf = decode(input.pdf_base64);
-    if (!isPdf(pdf)) {
-      throw new ToolInputError(
-        "That file isn't a PDF. Send the PDF attachment itself, base64-encoded.",
+    const pdf = decodeBase64File(input.pdf_base64, "pdf");
+    if (!pdf) {
+      unusable(
+        "That file isn't a PDF. Send the PDF attachment's bytes, base64-encoded (plain base64, base64url or a data: URL all work).",
       );
-    }
-    if (pdf.length > MAX_PDF_BYTES) {
-      throw new ToolInputError(
+    } else if (pdf.length > MAX_PDF_BYTES) {
+      unusable(
         "The PDF is larger than 3MB. Send its text and amounts instead, or the email itself.",
       );
+    } else {
+      file = { kind: "pdf", body: pdf, bytes: pdf.length };
+      details.fileKind = "pdf";
+      details.fileName = orNull(input.pdf_filename);
+      details.fileBytes = pdf.length;
+      details.contentHash = sha256(pdf);
     }
-    file = { kind: "pdf", body: pdf, bytes: pdf.length };
-    details.fileKind = "pdf";
-    details.fileName = orNull(input.pdf_filename);
-    details.fileBytes = pdf.length;
-    details.contentHash = sha256(pdf);
-  } else if (email?.html?.trim() || email?.text?.trim()) {
-    // No attachment: the email itself is the receipt.
-    const html = email.html?.trim() ? email.html : null;
-    const text = email.text?.trim() ? email.text : null;
+  }
+
+  if (!image && !file && hasEmailBody) {
+    // No attachment (or one that couldn't be used): the email itself is the receipt.
+    const html = email?.html?.trim() ? email.html : null;
+    const text = email?.text?.trim() ? email.text : null;
     const document = emailDocument({
       subject: details.emailSubject ?? null,
       from: details.emailFrom ?? null,
@@ -186,6 +203,7 @@ export function prepareReceipt(input: ReceiptInput): PreparedReceipt {
     },
     image,
     file,
+    fallback,
   };
 }
 
@@ -233,6 +251,17 @@ export async function discardReceiptFiles(
 export function preparedKind(prepared: PreparedReceipt): ReceiptKind {
   if (prepared.file) return prepared.file.kind;
   return prepared.image ? "photo" : "details";
+}
+
+/**
+ * The sentence a tool answer adds about the receipt it saved, including why
+ * the email was saved instead of a PDF or JPEG that couldn't be used.
+ */
+export function receiptNote(prepared: PreparedReceipt): string {
+  const saved = `Receipt attached (${receiptKindLabel(preparedKind(prepared))}).`;
+  return prepared.fallback
+    ? `${saved} ${prepared.fallback} The email itself was saved as the receipt instead.`
+    : saved;
 }
 
 const SAVED_AS: Record<ReceiptKind, string> = {
@@ -375,7 +404,7 @@ export async function attachReceiptFor(
       ? ` to the ${target.month} payment of that fixed bill`
       : "";
   return {
-    summary: `Receipt attached${where} ${SAVED_AS[kind]}. The user can open and download it in Budget.`,
+    summary: `Receipt attached${where} ${SAVED_AS[kind]}. The user can open and download it in Budget.${prepared.fallback ? ` ${prepared.fallback} The email itself was saved as the receipt instead.` : ""}`,
     data: {
       ...targetData(target),
       status: "attached",
@@ -384,6 +413,7 @@ export async function attachReceiptFor(
       has_file: receipt.filePathname !== null,
       replaced: result.replacedFiles.length > 0,
       replaced_photo: result.replacedFiles.some((p) => p.endsWith(".jpg")),
+      ...(prepared.fallback ? { copy_not_saved: prepared.fallback } : {}),
     },
   };
 }
