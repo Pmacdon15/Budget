@@ -28,14 +28,25 @@ export async function putReceiptFile(
   await put(pathname, file, { access: "private", contentType });
 }
 
-/** The photo's bytes, or null when it is gone. */
-export async function readReceiptImage(
+/**
+ * A stored photo's or receipt file's bytes, or null when it is gone.
+ *
+ * Read in full rather than streamed through: the store may answer
+ * compressed, and then the length it reports (the compressed size, or none
+ * at all) isn't the length of the bytes `fetch` hands back once it has
+ * decompressed them. Sending that length on would cut the file short. A
+ * receipt is 3MB at most, so holding it in memory is fine.
+ */
+export async function readReceiptFile(
   pathname: string,
 ): Promise<Uint8Array | null> {
   const result = await get(pathname, { access: "private" });
   if (result?.statusCode !== 200) return null;
   return new Uint8Array(await new Response(result.stream).arrayBuffer());
 }
+
+/** The photo's bytes, or null when it is gone. */
+export const readReceiptImage = readReceiptFile;
 
 /**
  * Best effort: a photo (or receipt file) left behind costs a few hundred KB,

@@ -1,14 +1,15 @@
 import "server-only";
-import { get } from "@vercel/blob";
 import { UnauthorizedError } from "@/dal/errors";
 import type { StoredReceiptFile } from "@/db/receipt-files";
 import { EMAIL_CONTENT_SECURITY_POLICY } from "@/lib/email-html";
+import { servableBytes } from "@/lib/receipt-bytes";
 import {
   downloadFilename,
   EMAIL_CONTENT_TYPE,
   PDF_CONTENT_TYPE,
 } from "@/lib/receipt-files";
 import { IMAGE_CONTENT_TYPE } from "@/lib/receipt-image";
+import { readReceiptFile } from "@/lib/receipt-store";
 import { idSchema } from "@/lib/schemas";
 
 /*
@@ -72,21 +73,31 @@ export async function receiptFileResponse(
     return Response.redirect(url, 307);
   }
 
-  let result: Awaited<ReturnType<typeof get>>;
+  let stored: Uint8Array | null;
   try {
-    result = await get(file.pathname, { access: "private" });
+    stored = await readReceiptFile(file.pathname);
   } catch (error) {
     console.error("reading a receipt file failed", error);
     return new Response("Bad gateway", { status: 502 });
   }
-  if (result?.statusCode !== 200) return notFound();
+  const bytes = stored ? bytesToServe(file.kind, stored) : null;
+  if (!bytes) {
+    if (stored) {
+      console.error("a stored receipt file is empty or not what it says", {
+        kind: file.kind,
+        bytes: stored.length,
+      });
+    }
+    return notFound();
+  }
 
   const download = new URL(request.url).searchParams.get("download") === "1";
   const filename = downloadFilename(file.kind, file.name);
   const headers: Record<string, string> = {
     // The type this app stored, never one sniffed or sent by someone else.
     "Content-Type": CONTENT_TYPES[file.kind],
-    "Content-Length": String(result.blob.size),
+    // The length of the bytes sent, never a length the store reported.
+    "Content-Length": String(bytes.length),
     "Content-Disposition": contentDisposition(
       download ? "attachment" : "inline",
       filename,
@@ -100,5 +111,22 @@ export async function receiptFileResponse(
     // The sender wrote this HTML: no scripts, no origin, no network.
     headers["Content-Security-Policy"] = EMAIL_CONTENT_SECURITY_POLICY;
   }
-  return new Response(result.stream, { headers });
+  return new Response(new Uint8Array(bytes), { headers });
+}
+
+/**
+ * The bytes to send for a stored copy, or null when there is nothing usable:
+ * an empty file, or a "PDF" that isn't one. A PDF or photo saved still
+ * base64-encoded is decoded, so it opens without being saved again.
+ */
+function bytesToServe(
+  kind: StoredReceiptFile["kind"],
+  stored: Uint8Array,
+): Uint8Array | null {
+  if (stored.length === 0) return null;
+  if (kind === "pdf") return servableBytes(stored, "pdf");
+  // A photo (always re-encoded as a JPEG by the app) or an email (stored as
+  // sanitized HTML) is served as stored; a photo saved still base64-encoded
+  // is decoded first.
+  return kind === "photo" ? (servableBytes(stored, "jpeg") ?? stored) : stored;
 }
