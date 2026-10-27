@@ -1,16 +1,22 @@
-import { Download, FileText, Mail, Paperclip } from "lucide-react";
+import { Download, File, FileText, Mail, Paperclip } from "lucide-react";
 import { type ReceiptKind, receiptKindLabel } from "@/lib/receipt-files";
 import { cn } from "@/lib/utils";
 
-const ICONS = { photo: Paperclip, pdf: FileText, email: Mail } as const;
+const ICONS = {
+  photo: Paperclip,
+  pdf: FileText,
+  email: Mail,
+  file: File,
+} as const;
 
 const VIEW_TITLES = {
   photo: "View receipt photo",
   pdf: "View receipt PDF",
   email: "View receipt email",
+  file: "Download receipt file",
 } as const;
 
-/** A saved email has its own, sandboxed route; a photo or PDF uses `/file`. */
+/** A saved email has its own, sandboxed route; a photo, PDF or other file uses `/file`. */
 const routeFor = (kind: ReceiptKind) => (kind === "email" ? "email" : "file");
 
 /** The owner-checked route that serves a saved receipt's copy. */
@@ -57,6 +63,22 @@ export function ReceiptLinks({
   }
   const Icon = ICONS[kind];
   const what = receiptKindLabel(kind);
+  if (kind === "file") {
+    // Another kind of file can't be shown, only downloaded.
+    return (
+      <span className={cn("inline-flex items-center gap-1", className)}>
+        <a
+          href={`${href}?download=1`}
+          download
+          className="text-muted-foreground hover:text-foreground"
+          aria-label={`Download ${what} for ${label}`}
+          title={VIEW_TITLES.file}
+        >
+          <Icon className="size-3.5" />
+        </a>
+      </span>
+    );
+  }
   return (
     <span className={cn("inline-flex items-center gap-1", className)}>
       <a

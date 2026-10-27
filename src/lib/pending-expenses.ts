@@ -70,6 +70,8 @@ export type ReceiptDetails = {
   emailMessageId?: string | null;
   /** sha256 of the file (or email body) that was sent, for the same reason. */
   contentHash?: string | null;
+  /** ISO 4217 code the amounts are in (EUR, USD, ...). Null: CAD or not stated. */
+  currency?: string | null;
 };
 
 /** An expense or pending item that looks like a new one: same day, same amount. */
@@ -194,6 +196,15 @@ export const receiptInputSchema = z.object({
   subtotal: nonNegativeDollars.optional().describe("Before tax, in dollars."),
   tax: nonNegativeDollars.optional().describe("Tax, in dollars."),
   total: nonNegativeDollars.optional().describe("Total, in dollars."),
+  currency: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z]{3}$/, "Use a 3-letter currency code, e.g. EUR")
+    .optional()
+    .describe(
+      "The ISO 4217 code the receipt's amounts are in, when they aren't Canadian dollars (EUR, USD, ...). The expense's own amount is always in CAD: ask the user what their card was charged.",
+    ),
   text: z
     .string()
     .max(4000, "Keep the receipt text under 4,000 characters")
@@ -341,6 +352,32 @@ export const listExpensesInputSchema = z.object({
     .optional()
     .describe("Last day to include, as YYYY-MM-DD. Defaults to today."),
 });
+
+/** What `read_receipt` takes: a saved expense or a pending item, and whether to read its file again. */
+export const readReceiptInputSchema = z
+  .object({
+    expense_id: z
+      .uuid()
+      .optional()
+      .describe("A saved expense's id, from list_expenses."),
+    pending_id: z
+      .uuid()
+      .optional()
+      .describe(
+        "An id from list_expenses' pending_review, or from add_expense.",
+      ),
+    read_file: z
+      .boolean()
+      .optional()
+      .describe(
+        "Read the saved file (PDF, photo or email) with AI now, instead of only returning what was read off it when it was saved. Uses one of the user's receipt scans.",
+      ),
+  })
+  .refine(
+    (value) =>
+      [value.expense_id, value.pending_id].filter(Boolean).length === 1,
+    "Give exactly one of expense_id or pending_id",
+  );
 
 /**
  * What `attach_receipt` takes: where it goes (a saved expense, a pending item,

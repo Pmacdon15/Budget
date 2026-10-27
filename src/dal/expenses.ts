@@ -5,6 +5,7 @@ import {
   deleteExpenseRow,
   type ExpenseLine,
   insertExpenseLines,
+  selectExpenseById,
   selectExpensesForExport,
   selectReceiptImage,
   updateExpenseRow,
@@ -90,6 +91,24 @@ export async function createExpense(
 export async function updateExpense(id: string, input: ExpenseInput) {
   const userId = await currentUserIdOrThrow();
   const updated = await updateExpenseRow(userId, id, values(input));
+  if (!updated) throw new NotFoundError();
+}
+
+/**
+ * Changes only an expense's amount, e.g. to the total read off the receipt
+ * the user just uploaded, once they confirm it.
+ */
+export async function setExpenseAmount(id: string, amountCents: number) {
+  const userId = await currentUserIdOrThrow();
+  const expense = await selectExpenseById(userId, id);
+  if (!expense) throw new NotFoundError();
+  const updated = await updateExpenseRow(userId, id, {
+    month: expense.month,
+    spentOn: expense.spentOn,
+    description: expense.description,
+    category: expense.category,
+    amountCents,
+  });
   if (!updated) throw new NotFoundError();
 }
 

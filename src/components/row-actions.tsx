@@ -1,7 +1,7 @@
 "use client";
 
 import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -18,7 +18,7 @@ export type RowAction = {
 };
 
 /**
- * A "⋯" menu with Edit / Delete (plus an optional `extra` action). The dialogs are rendered outside the menu and opened
+ * A "⋯" menu with Edit / Delete (plus optional `extra` actions). The dialogs are rendered outside the menu and opened
  * programmatically via hidden triggers, so closing the menu doesn't unmount them.
  */
 export function RowActions({
@@ -32,17 +32,18 @@ export function RowActions({
   deleteLabel?: string;
   renderEdit: (trigger: React.ReactElement) => React.ReactNode;
   renderDelete: (trigger: React.ReactElement) => React.ReactNode;
-  extra?: RowAction;
+  /** One action, or several, shown in order between Edit and Delete. */
+  extra?: RowAction | RowAction[];
 }) {
+  const extras = extra ? (Array.isArray(extra) ? extra : [extra]) : [];
   const [editTrigger, setEditTrigger] = useState<HTMLButtonElement | null>(
     null,
   );
   const [deleteTrigger, setDeleteTrigger] = useState<HTMLButtonElement | null>(
     null,
   );
-  const [extraTrigger, setExtraTrigger] = useState<HTMLButtonElement | null>(
-    null,
-  );
+  // Read at click time, so a ref (not state) is enough for each extra.
+  const extraTriggers = useRef<(HTMLButtonElement | null)[]>([]);
 
   return (
     <>
@@ -62,11 +63,14 @@ export function RowActions({
           <DropdownMenuItem onClick={() => editTrigger?.click()}>
             <Pencil /> Edit
           </DropdownMenuItem>
-          {extra ? (
-            <DropdownMenuItem onClick={() => extraTrigger?.click()}>
-              {extra.icon} {extra.label}
+          {extras.map((action, index) => (
+            <DropdownMenuItem
+              key={action.label}
+              onClick={() => extraTriggers.current[index]?.click()}
+            >
+              {action.icon} {action.label}
             </DropdownMenuItem>
-          ) : null}
+          ))}
           <DropdownMenuItem
             variant="destructive"
             onClick={() => deleteTrigger?.click()}
@@ -83,14 +87,20 @@ export function RowActions({
           tabIndex={-1}
         />,
       )}
-      {extra?.render(
-        <button
-          type="button"
-          ref={setExtraTrigger}
-          className="hidden"
-          tabIndex={-1}
-        />,
-      )}
+      {extras.map((action, index) => (
+        <span key={action.label} className="contents">
+          {action.render(
+            <button
+              type="button"
+              ref={(node) => {
+                extraTriggers.current[index] = node;
+              }}
+              className="hidden"
+              tabIndex={-1}
+            />,
+          )}
+        </span>
+      ))}
       {renderDelete(
         <button
           type="button"

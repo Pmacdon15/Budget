@@ -252,7 +252,7 @@ export async function setBillPaymentReceipt(
           email_subject = ${values.emailSubject}, email_from = ${values.emailFrom},
           email_date = ${values.emailDate},
           email_message_id = ${values.emailMessageId},
-          content_hash = ${values.contentHash}
+          content_hash = ${values.contentHash}, currency = ${values.currency}
       from target
       where r.id = target.receipt_id and r.user_id = ${userId}
       returning r.id
@@ -262,13 +262,13 @@ export async function setBillPaymentReceipt(
                             tax_cents, total_cents, raw_text, image_pathname,
                             file_pathname, file_kind, file_name, file_bytes,
                             email_subject, email_from, email_date,
-                            email_message_id, content_hash)
+                            email_message_id, content_hash, currency)
       select ${userId}, ${values.merchant}, ${values.purchasedOn},
              ${values.subtotalCents}, ${values.taxCents}, ${values.totalCents},
              ${values.rawText}, ${values.imagePathname}, ${values.filePathname},
              ${values.fileKind}, ${values.fileName}, ${values.fileBytes},
              ${values.emailSubject}, ${values.emailFrom}, ${values.emailDate},
-             ${values.emailMessageId}, ${values.contentHash}
+             ${values.emailMessageId}, ${values.contentHash}, ${values.currency}
       from target
       where target.receipt_id is null
       returning id
@@ -309,6 +309,7 @@ export function receiptValues(r: ReceiptDetails) {
     emailDate: r.emailDate ?? null,
     emailMessageId: r.emailMessageId ?? null,
     contentHash: r.contentHash ?? null,
+    currency: r.currency ?? null,
   };
 }
 
@@ -327,7 +328,7 @@ function toStoredFile(r: Row | undefined): StoredReceiptFile | null {
     return {
       kind,
       pathname: String(r.file_pathname),
-      name: (kind === "pdf" ? r.file_name : r.email_subject) ?? null,
+      name: (kind === "email" ? r.email_subject : r.file_name) ?? null,
     };
   }
   if (r.image_pathname) {
@@ -412,4 +413,96 @@ export async function selectBillReceipts(
       },
     ]),
   );
+}
+
+/** Everything saved with a receipt: what was read off it and its copy. */
+export type SavedReceipt = {
+  merchant: string | null;
+  purchasedOn: string | null;
+  subtotalCents: number | null;
+  taxCents: number | null;
+  totalCents: number | null;
+  currency: string | null;
+  rawText: string | null;
+  kind: ReceiptKind;
+  /** Where its copy is, when it has one. Never leaves the server. */
+  pathname: string | null;
+  fileName: string | null;
+  emailSubject: string | null;
+  emailFrom: string | null;
+  emailDate: string | null;
+};
+
+const intOrNull = (value: unknown) =>
+  value == null || value === "" ? null : Number(value);
+
+function toSavedReceipt(r: Row | undefined): SavedReceipt | null {
+  if (!r) return null;
+  const kind = receiptKindOf({
+    fileKind: r.file_kind,
+    imagePathname: r.image_pathname,
+  });
+  return {
+    merchant: str(r.merchant),
+    purchasedOn: str(r.purchased_on)?.slice(0, 10) ?? null,
+    subtotalCents: intOrNull(r.subtotal_cents),
+    taxCents: intOrNull(r.tax_cents),
+    totalCents: intOrNull(r.total_cents),
+    currency: str(r.currency),
+    rawText: str(r.raw_text),
+    kind,
+    pathname:
+      kind === "photo"
+        ? str(r.image_pathname)
+        : kind === "details"
+          ? null
+          : str(r.file_pathname),
+    fileName: str(r.file_name),
+    emailSubject: str(r.email_subject),
+    emailFrom: str(r.email_from),
+    emailDate: str(r.email_date),
+  };
+}
+
+/** The receipt saved with one of the user's expenses, or null without one. */
+export async function selectExpenseSavedReceipt(
+  userId: string,
+  expenseId: string,
+): Promise<SavedReceipt | null> {
+  const rows = await db()`
+    select r.merchant, r.purchased_on, r.subtotal_cents, r.tax_cents,
+           r.total_cents, r.currency, r.raw_text, r.image_pathname,
+           r.file_pathname, r.file_kind, r.file_name, r.email_subject,
+           r.email_from, r.email_date
+    from expenses e
+    join receipts r on r.id = e.receipt_id and r.user_id = e.user_id
+    where e.id = ${expenseId} and e.user_id = ${userId}
+  `;
+  return toSavedReceipt(rows[0]);
+}
+
+/** The receipt an AI attached to one of the user's items waiting for review. */
+export async function selectPendingSavedReceipt(
+  userId: string,
+  pendingId: string,
+): Promise<SavedReceipt | null> {
+  const rows = await db()`
+    select receipt->>'merchant' as merchant,
+           receipt->>'purchased_on' as purchased_on,
+           receipt->>'subtotal_cents' as subtotal_cents,
+           receipt->>'tax_cents' as tax_cents,
+           receipt->>'total_cents' as total_cents,
+           receipt->>'currency' as currency,
+           receipt->>'raw_text' as raw_text,
+           receipt->>'image_pathname' as image_pathname,
+           receipt->>'file_pathname' as file_pathname,
+           receipt->>'file_kind' as file_kind,
+           receipt->>'file_name' as file_name,
+           receipt->>'email_subject' as email_subject,
+           receipt->>'email_from' as email_from,
+           receipt->>'email_date' as email_date
+    from pending_expenses
+    where id = ${pendingId} and user_id = ${userId} and receipt is not null
+  `;
+  return toSavedReceipt(rows[0]);
 }
