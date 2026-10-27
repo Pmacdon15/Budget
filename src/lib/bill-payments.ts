@@ -12,6 +12,13 @@ import type { FixedItem } from "@/lib/types";
 export const billPaymentSchema = z.object({
   fixedItemId: idSchema,
   month: monthSchema,
+  /**
+   * Whether the money came off the bank account. When it didn't, the paid
+   * mark is bookkeeping only: the bill still counts as paid for the month,
+   * but the bank balance doesn't move. Omitted means it did come off.
+   * Ignored when unmarking.
+   */
+  offBankAccount: z.boolean().optional(),
 });
 
 export type BillPaymentInput = z.output<typeof billPaymentSchema>;
