@@ -25,20 +25,44 @@ const toggle = (paid: boolean) =>
   );
 
 describe("BillPaidToggle", () => {
-  it("marks an unpaid bill paid for the month", async () => {
+  it("asks, then marks an unpaid bill paid off the bank account", async () => {
     toggle(false);
     const button = screen.getByRole("button", {
       name: "Mark Rent paid for October 2026",
     });
     expect(button).toHaveAttribute("aria-pressed", "false");
     await userEvent.click(button);
+    // Nothing is marked until the bank-account question is answered.
+    expect(actions.markBillPaid).not.toHaveBeenCalled();
+    expect(await screen.findByRole("alertdialog")).toBeVisible();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Yes — it came off" }),
+    );
     await waitFor(() =>
       expect(actions.markBillPaid).toHaveBeenCalledWith({
         fixedItemId: ID,
         month: "2026-10",
+        offBankAccount: true,
       }),
     );
     expect(actions.unmarkBillPaid).not.toHaveBeenCalled();
+  });
+
+  it("marks it paid without the bank account when it didn't come off", async () => {
+    toggle(false);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Mark Rent paid for October 2026" }),
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: "No — just mark it paid" }),
+    );
+    await waitFor(() =>
+      expect(actions.markBillPaid).toHaveBeenCalledWith({
+        fixedItemId: ID,
+        month: "2026-10",
+        offBankAccount: false,
+      }),
+    );
   });
 
   it("takes the paid mark off", async () => {
@@ -62,6 +86,9 @@ describe("BillPaidToggle", () => {
     });
     toggle(false);
     await userEvent.click(screen.getByRole("button", { name: /Mark Rent/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Yes — it came off" }),
+    );
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Not found"));
   });
 });
