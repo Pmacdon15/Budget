@@ -59,7 +59,6 @@ import {
   toCents,
   unlinkFixedBillInputSchema,
 } from "@/lib/pending-expenses";
-import { receiptKindLabel } from "@/lib/receipt-files";
 import type { FixedItem } from "@/lib/types";
 import {
   attachReceiptFor,
@@ -67,6 +66,7 @@ import {
   friendly,
   preparedKind,
   prepareReceipt,
+  receiptNote,
   storePreparedReceipt,
 } from "@/mcp/receipts";
 
@@ -271,9 +271,7 @@ async function addExpenseFor(
     input.unpaid
       ? "Marked not paid yet: it stays off the bank balance until mark_expense_paid."
       : null,
-    prepared
-      ? `Receipt attached (${receiptKindLabel(preparedKind(prepared))}).`
-      : null,
+    prepared ? receiptNote(prepared) : null,
   ].filter(Boolean);
   return {
     summary: `Sent to Pending Review: ${input.merchant}, $${input.amount.toFixed(2)} on ${input.date} (${input.category}). The user approves it in Budget at ${REVIEW_URL} before it counts as an expense.${notes.length ? ` ${notes.join(" ")}` : ""}`,
