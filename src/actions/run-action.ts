@@ -1,7 +1,7 @@
 import "server-only";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { NotFoundError, UnauthorizedError } from "@/dal/errors";
+import { ConflictError, NotFoundError, UnauthorizedError } from "@/dal/errors";
 import type { ActionResult } from "@/lib/types";
 
 /**
@@ -21,7 +21,11 @@ export async function runAction(
         fieldErrors: z.flattenError(error).fieldErrors,
       };
     }
-    if (error instanceof UnauthorizedError || error instanceof NotFoundError) {
+    if (
+      error instanceof UnauthorizedError ||
+      error instanceof NotFoundError ||
+      error instanceof ConflictError
+    ) {
       return { ok: false, error: error.message };
     }
     console.error(error);
