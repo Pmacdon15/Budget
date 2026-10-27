@@ -5,6 +5,7 @@ import { CategoryBars } from "@/components/charts/category-bars";
 import { Delta } from "@/components/delta";
 import { EmptyState } from "@/components/empty-state";
 import { ExpenseActions } from "@/components/expense-actions";
+import { FindSubscriptionsDialog } from "@/components/expense-bills/find-subscriptions-dialog";
 import { ExpenseSearchForm } from "@/components/expense-search/expense-search-form";
 import {
   ExpenseSearchSummary,
@@ -49,6 +50,7 @@ import {
   isSearching,
 } from "@/lib/schemas/expense-search";
 import { monthFrom, type SearchParams } from "@/lib/search-params";
+import { existingBill } from "@/lib/subscription-candidates";
 import type { CategoryTotal } from "@/lib/types";
 
 export const metadata = { title: "Spending" };
@@ -79,10 +81,11 @@ export default function ExpensesPage({
           </>
         }
       >
-        <Suspense fallback={<ActionsSkeleton count={3} />}>
+        <Suspense fallback={<ActionsSkeleton count={4} />}>
           {month.then((m) => (
             <>
               <ExportDialog month={m} />
+              <FindSubscriptionsDialog month={m} />
               <ScanReceiptButton month={m} />
               <ExpenseDialog
                 month={m}
@@ -122,10 +125,11 @@ async function Expenses({
 }) {
   const [month, search] = await Promise.all([monthPromise, searchPromise]);
   const searching = isSearching(search);
-  const [{ expenses, current, previous }, matches] = await Promise.all([
-    getMonthOverview(month, 2),
-    searching ? searchExpenses(month, search) : null,
-  ]);
+  const [{ expenses, current, previous, fixedItems }, matches] =
+    await Promise.all([
+      getMonthOverview(month, 2),
+      searching ? searchExpenses(month, search) : null,
+    ]);
   const shown = matches ?? expenses;
 
   const byCategory = new Map<string, CategoryTotal>();
@@ -243,7 +247,10 @@ async function Expenses({
                         {formatMoney(expense.amountCents)}
                       </TableCell>
                       <TableCell>
-                        <ExpenseActions expense={expense} />
+                        <ExpenseActions
+                          expense={expense}
+                          billMatch={existingBill(fixedItems, expense)}
+                        />
                       </TableCell>
                     </TableRow>
                   ))}
