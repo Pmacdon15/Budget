@@ -302,6 +302,7 @@ describe("MCP endpoint with an API key", () => {
       "mark_bill_paid",
       "mark_expense_paid",
       "propose_account",
+      "read_receipt",
       "record_statement",
       "record_transfer",
       "sync_bank_balance",
