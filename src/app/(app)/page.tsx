@@ -83,19 +83,31 @@ export default function OverviewPage({
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Suspense
-          fallback={<StatCardSkeleton label="Take-home" icon={Wallet} />}
+          fallback={
+            <StatCardSkeleton label="Take-home" icon={Wallet} href="/income" />
+          }
         >
           <TakeHomeStat month={month} />
         </Suspense>
         <Suspense
           fallback={
-            <StatCardSkeleton label="Fixed bills" icon={CalendarRange} />
+            <StatCardSkeleton
+              label="Fixed bills"
+              icon={CalendarRange}
+              href="/fixed"
+            />
           }
         >
           <FixedStat month={month} />
         </Suspense>
         <Suspense
-          fallback={<StatCardSkeleton label="Spending" icon={Receipt} />}
+          fallback={
+            <StatCardSkeleton
+              label="Spending"
+              icon={Receipt}
+              href="/expenses"
+            />
+          }
         >
           <SpendingStat month={month} />
         </Suspense>
@@ -331,11 +343,17 @@ async function GettingStarted({ month }: MonthProp) {
 }
 
 async function TakeHomeStat({ month }: MonthProp) {
-  const { current, previous, rollingIncomeCents } = await overviewFor(month);
+  const {
+    month: m,
+    current,
+    previous,
+    rollingIncomeCents,
+  } = await overviewFor(month);
   return (
     <StatCard
       label="Take-home"
       icon={Wallet}
+      href={`/income?month=${m}`}
       value={formatMoney(current.incomeCents)}
       hint={
         rollingIncomeCents > 0 ? (
@@ -353,11 +371,12 @@ async function TakeHomeStat({ month }: MonthProp) {
 }
 
 async function FixedStat({ month }: MonthProp) {
-  const { current, fixedItems } = await overviewFor(month);
+  const { month: m, current, fixedItems } = await overviewFor(month);
   return (
     <StatCard
       label="Fixed bills"
       icon={CalendarRange}
+      href={`/fixed?month=${m}`}
       value={formatMoney(current.fixedCents)}
       hint={`${fixedItems.length} recurring ${fixedItems.length === 1 ? "bill" : "bills"}`}
     />
@@ -365,11 +384,12 @@ async function FixedStat({ month }: MonthProp) {
 }
 
 async function SpendingStat({ month }: MonthProp) {
-  const { current, previous } = await overviewFor(month);
+  const { month: m, current, previous } = await overviewFor(month);
   return (
     <StatCard
       label="Spending"
       icon={Receipt}
+      href={`/expenses?month=${m}`}
       value={formatMoney(current.variableCents)}
       hint={
         <Delta
