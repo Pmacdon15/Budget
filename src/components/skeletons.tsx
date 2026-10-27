@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import { StatCardHeading } from "@/components/stat-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -32,18 +33,18 @@ export function ActionsSkeleton({ count = 2 }: { count?: number }) {
 /** A `StatCard` with its label and icon, waiting for the number. */
 export function StatCardSkeleton({
   label,
-  icon: Icon,
+  icon,
+  href,
 }: {
   label: React.ReactNode;
   icon?: LucideIcon;
+  /** Same as `StatCard`: the label and icon link to this section's page. */
+  href?: string;
 }) {
   return (
     <Card size="sm" aria-busy="true">
       <CardContent className="flex flex-col gap-2">
-        <div className="flex items-center justify-between text-muted-foreground text-sm">
-          <span>{label}</span>
-          {Icon ? <Icon className="size-4" /> : null}
-        </div>
+        <StatCardHeading label={label} icon={icon} href={href} />
         <Skeleton className="h-8 w-28" />
         <Skeleton className="h-3.5 w-24" />
       </CardContent>

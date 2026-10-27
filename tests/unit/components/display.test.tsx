@@ -78,6 +78,30 @@ describe("StatCard", () => {
     );
     expect(container.querySelectorAll(".text-xs")).toHaveLength(0);
   });
+
+  it("has no link without an href", () => {
+    render(<StatCard label="Left over" value="$1" icon={Wallet} />);
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("links its label and icon to the section's page", () => {
+    const { container } = render(
+      <StatCard
+        label="Take-home"
+        value="$2,500.00"
+        icon={Wallet}
+        href="/income?month=2026-10"
+      />,
+    );
+    const link = screen.getByRole("link", { name: "Go to Take-home" });
+    expect(link).toHaveAttribute("href", "/income?month=2026-10");
+    expect(link).toHaveTextContent("Take-home");
+    expect(link.querySelector("svg")).not.toBeNull();
+    expect(link).toHaveClass("min-h-11");
+    // The value stays outside the link.
+    expect(link).not.toHaveTextContent("$2,500.00");
+    expect(container.querySelectorAll("a")).toHaveLength(1);
+  });
 });
 
 describe("EmptyState", () => {
@@ -124,6 +148,15 @@ describe("Skeletons", () => {
     expect(screen.getByText("Take-home")).toBeInTheDocument();
     expect(container.querySelector("[aria-busy=true]")).not.toBeNull();
     expect(container.querySelector("svg")).not.toBeNull();
+  });
+
+  it("links a stat card's label while its number loads, when given an href", () => {
+    render(
+      <StatCardSkeleton label="Spending" icon={Wallet} href="/expenses" />,
+    );
+    expect(
+      screen.getByRole("link", { name: "Go to Spending" }),
+    ).toHaveAttribute("href", "/expenses");
   });
 
   it("sizes a text placeholder inline", () => {
