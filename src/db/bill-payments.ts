@@ -122,3 +122,20 @@ export async function unlinkExpenseFromBillRow(
   ]);
   return Array.isArray(rows) && rows.length > 0;
 }
+
+/**
+ * The expense already recorded as `fixedItemId`'s payment for `month`, if
+ * any. Null when the month isn't paid, or was marked paid by hand.
+ */
+export async function selectBillPaymentExpenseId(
+  userId: string,
+  fixedItemId: string,
+  month: string,
+): Promise<string | null> {
+  const [row] = await db()`
+    select expense_id from fixed_item_payments
+    where user_id = ${userId} and fixed_item_id = ${fixedItemId}
+      and month = ${month}
+  `;
+  return row?.expense_id ? String(row.expense_id) : null;
+}
