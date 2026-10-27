@@ -230,7 +230,7 @@ export async function approvePendingIncome(
                             tax_cents, total_cents, raw_text, image_pathname,
                             file_pathname, file_kind, file_name, file_bytes,
                             email_subject, email_from, email_date,
-                            email_message_id, content_hash)
+                            email_message_id, content_hash, currency)
       select user_id, coalesce(receipt->>'merchant', payer),
              (receipt->>'purchased_on')::date,
              (receipt->>'subtotal_cents')::int, (receipt->>'tax_cents')::int,
@@ -239,7 +239,8 @@ export async function approvePendingIncome(
              receipt->>'file_kind', receipt->>'file_name',
              (receipt->>'file_bytes')::int, receipt->>'email_subject',
              receipt->>'email_from', receipt->>'email_date',
-             receipt->>'email_message_id', receipt->>'content_hash'
+             receipt->>'email_message_id', receipt->>'content_hash',
+             receipt->>'currency'
       from taken
       where receipt is not null
       returning id

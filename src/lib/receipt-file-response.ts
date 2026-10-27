@@ -6,6 +6,7 @@ import { servableBytes } from "@/lib/receipt-bytes";
 import {
   downloadFilename,
   EMAIL_CONTENT_TYPE,
+  FILE_CONTENT_TYPE,
   PDF_CONTENT_TYPE,
 } from "@/lib/receipt-files";
 import { IMAGE_CONTENT_TYPE } from "@/lib/receipt-image";
@@ -24,7 +25,7 @@ import { idSchema } from "@/lib/schemas";
  * next.config wins over the same header set by a route.
  */
 
-/** Which route is serving: `/file` (photo or PDF) or `/email`. */
+/** Which route is serving: `/file` (photo, PDF or other file) or `/email`. */
 export type ReceiptRoute = "file" | "email";
 
 /** One answer for every refusal, so a probe can't tell the cases apart. */
@@ -34,6 +35,7 @@ const CONTENT_TYPES: Record<StoredReceiptFile["kind"], string> = {
   photo: IMAGE_CONTENT_TYPE,
   pdf: PDF_CONTENT_TYPE,
   email: EMAIL_CONTENT_TYPE,
+  file: FILE_CONTENT_TYPE,
 };
 
 /** `attachment` or `inline`, with an ASCII filename and its UTF-8 twin. */
@@ -91,7 +93,11 @@ export async function receiptFileResponse(
     return notFound();
   }
 
-  const download = new URL(request.url).searchParams.get("download") === "1";
+  // Any other file the user uploaded is someone else's bytes of an unknown
+  // type: it is only ever downloaded, never opened in the app's origin.
+  const download =
+    file.kind === "file" ||
+    new URL(request.url).searchParams.get("download") === "1";
   const filename = downloadFilename(file.kind, file.name);
   const headers: Record<string, string> = {
     // The type this app stored, never one sniffed or sent by someone else.
@@ -125,6 +131,7 @@ function bytesToServe(
 ): Uint8Array | null {
   if (stored.length === 0) return null;
   if (kind === "pdf") return servableBytes(stored, "pdf");
+  if (kind === "file") return stored;
   // A photo (always re-encoded as a JPEG by the app) or an email (stored as
   // sanitized HTML) is served as stored; a photo saved still base64-encoded
   // is decoded first.

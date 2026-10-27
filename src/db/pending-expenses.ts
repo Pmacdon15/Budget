@@ -45,6 +45,7 @@ export const receiptJson = (r: ReceiptDetails) =>
     email_date: r.emailDate ?? null,
     email_message_id: r.emailMessageId ?? null,
     content_hash: r.contentHash ?? null,
+    currency: r.currency ?? null,
   });
 
 function toDateString(value: unknown): string {
@@ -263,7 +264,7 @@ export async function approvePendingExpense(
                             tax_cents, total_cents, raw_text, image_pathname,
                             file_pathname, file_kind, file_name, file_bytes,
                             email_subject, email_from, email_date,
-                            email_message_id, content_hash)
+                            email_message_id, content_hash, currency)
       select user_id, receipt->>'merchant', (receipt->>'purchased_on')::date,
              (receipt->>'subtotal_cents')::int, (receipt->>'tax_cents')::int,
              (receipt->>'total_cents')::int, receipt->>'raw_text',
@@ -271,7 +272,8 @@ export async function approvePendingExpense(
              receipt->>'file_kind', receipt->>'file_name',
              (receipt->>'file_bytes')::int, receipt->>'email_subject',
              receipt->>'email_from', receipt->>'email_date',
-             receipt->>'email_message_id', receipt->>'content_hash'
+             receipt->>'email_message_id', receipt->>'content_hash',
+             receipt->>'currency'
       from taken
       where receipt is not null
       returning id

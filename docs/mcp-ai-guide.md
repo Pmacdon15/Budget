@@ -80,6 +80,8 @@ Files are 3MB at most, and must be what they say (a PDF starts with `%PDF-`, a J
 
 **Sending the same email twice is safe.** `attach_receipt` recognizes an email it already has (by `message_id`, or by the file's contents) and answers `already_attached` without saving anything. A different email or a new reading replaces the receipt; an item never has two. `add_expense` answers `possible_duplicate` when another expense or pending item already holds that receipt email.
 
+**Other currencies and uploaded files.** A receipt can say which currency it's in (`currency`, e.g. `EUR`); the expense's own amount is always Canadian dollars, so the assistant asks what your card was charged. You can also upload any file as an expense's receipt yourself (⋯ → Add receipt file): Budget reads PDFs, photos and emails and offers the amount for you to confirm, and an assistant can read them later with `read_receipt`.
+
 In Budget, receipts show next to the expense on **Spending**, the item on **Review**, the bill on **Fixed bills** (for the month it was paid) and in **Receipts**, with a link to open it (a paperclip for a photo, a page for a PDF, an envelope for an email) and one to download it. A receipt with details only shows a plain paperclip.
 
 ## Tools
@@ -95,6 +97,7 @@ In Budget, receipts show next to the expense on **Spending**, the item on **Revi
 | `add_income` | Sends money you received to Pending Review: `amount`, `date`, `payer`, optional `label`, `account_id`, `source`, `receipt`, `allow_duplicate`. Approving makes it take-home and deposits it | Adds to review only |
 | `mark_expense_paid` | Marks an unpaid expense (or pending item) paid on `paid_on`, so it comes off the balance | Yes |
 | `attach_receipt` | Adds or replaces a receipt on an expense (`expense_id`), pending item (`pending_id`) or fixed bill payment (`fixed_bill_id` + `month`): its details plus a JPEG, the email's PDF, or the email itself. The same email again answers `already_attached` | Yes |
+| `read_receipt` | What a saved expense's (`expense_id`) or pending item's (`pending_id`) receipt says: merchant, date, amounts, currency and text, including a PDF or file you uploaded in Budget. With `read_file: true` it reads the PDF, photo or email again with AI (one receipt scan). It never changes anything | No |
 | `sync_bank_balance` | Sets the bank balance (your primary chequing account, the one expenses come off) to what the bank reported: `balance` (negative when overdrawn), optional `source` | Yes |
 | `list_accounts` | Your accounts with ids, institutions, last four digits and balances now, accounts waiting for review (`include_proposed: false` to leave them out), net chequing and this month's leftover spend | No |
 | `propose_account` | Proposes a new account (`type`, `institution`, `last_four`, optional `name`, `balance`, `as_of`, credit details). It goes to Pending Review; nothing is created until you approve it | Adds to review only |

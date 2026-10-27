@@ -130,6 +130,24 @@ export async function selectExpenseById(
   return rows[0] ? toExpense(rows[0]) : null;
 }
 
+/**
+ * How many of the user's expenses share this expense's receipt: more than
+ * one when it was split across categories. 0 when it has no receipt.
+ */
+export async function countExpensesSharingReceipt(
+  userId: string,
+  expenseId: string,
+): Promise<number> {
+  const rows = await db()`
+    select count(*)::int as parts
+    from expenses e
+    join expenses mine on mine.receipt_id = e.receipt_id
+                      and mine.user_id = e.user_id
+    where mine.id = ${expenseId} and mine.user_id = ${userId}
+  `;
+  return Number(rows[0]?.parts ?? 0);
+}
+
 export async function insertExpense(userId: string, values: ExpenseValues) {
   await db()`
     insert into expenses (user_id, month, spent_on, description, category, amount_cents)
@@ -356,7 +374,7 @@ export async function setExpenseReceipt(
           email_subject = ${values.emailSubject}, email_from = ${values.emailFrom},
           email_date = ${values.emailDate},
           email_message_id = ${values.emailMessageId},
-          content_hash = ${values.contentHash}
+          content_hash = ${values.contentHash}, currency = ${values.currency}
       from target
       where r.id = target.receipt_id and r.user_id = ${userId}
       returning r.id
@@ -366,13 +384,13 @@ export async function setExpenseReceipt(
                             tax_cents, total_cents, raw_text, image_pathname,
                             file_pathname, file_kind, file_name, file_bytes,
                             email_subject, email_from, email_date,
-                            email_message_id, content_hash)
+                            email_message_id, content_hash, currency)
       select ${userId}, ${values.merchant}, ${values.purchasedOn},
              ${values.subtotalCents}, ${values.taxCents}, ${values.totalCents},
              ${values.rawText}, ${values.imagePathname}, ${values.filePathname},
              ${values.fileKind}, ${values.fileName}, ${values.fileBytes},
              ${values.emailSubject}, ${values.emailFrom}, ${values.emailDate},
-             ${values.emailMessageId}, ${values.contentHash}
+             ${values.emailMessageId}, ${values.contentHash}, ${values.currency}
       from target
       where target.receipt_id is null
       returning id

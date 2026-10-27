@@ -1,5 +1,6 @@
 import "server-only";
 import { createHash } from "node:crypto";
+import { claimReceiptScan } from "@/dal/receipt-scans";
 import { selectExpenseById, setExpenseReceipt } from "@/db/expenses";
 import { selectPendingExpense, setPendingReceipt } from "@/db/pending-expenses";
 import {
@@ -7,19 +8,29 @@ import {
   isSameReceipt,
   type ReceiptSource,
   readingOf,
+  type SavedReceipt,
   selectBillPaymentTarget,
   selectExpenseReceipt,
+  selectExpenseSavedReceipt,
   selectPendingReceipt,
+  selectPendingSavedReceipt,
   setBillPaymentReceipt,
 } from "@/db/receipt-files";
-import { emailDocument } from "@/lib/email-html";
+import { emailDocument, emailHtmlToText } from "@/lib/email-html";
+import { formatMoney } from "@/lib/money";
 import {
   attachReceiptInputSchema,
   type ReceiptDetails,
   type ReceiptInput,
+  readReceiptInputSchema,
   toCents,
 } from "@/lib/pending-expenses";
-import { decodeBase64File } from "@/lib/receipt-bytes";
+import {
+  type ReadableReceipt,
+  readReceiptSafely,
+  type ScannedFields,
+} from "@/lib/receipt-ai";
+import { decodeBase64File, servableBytes } from "@/lib/receipt-bytes";
 import {
   EMAIL_CONTENT_TYPE,
   MAX_PDF_BYTES,
@@ -39,7 +50,9 @@ import {
   deleteReceiptImage,
   putReceiptFile,
   putReceiptImage,
+  readReceiptFile,
 } from "@/lib/receipt-store";
+import { isReadableText } from "@/lib/receipt-upload";
 
 /*
  * Receipts the AI sends from email: what it read off them, plus a copy to
@@ -109,6 +122,8 @@ export function prepareReceipt(input: ReceiptInput): PreparedReceipt {
     emailDate: orNull(email?.date),
     emailMessageId: normalizeMessageId(email?.message_id),
     contentHash: null,
+    currency:
+      input.currency && input.currency !== "CAD" ? input.currency : null,
   };
 
   if (input.image_jpeg_base64 && input.pdf_base64) {
@@ -268,6 +283,7 @@ const SAVED_AS: Record<ReceiptKind, string> = {
   photo: "with its photo",
   pdf: "with its PDF",
   email: "with a copy of the email",
+  file: "with the file",
   details: "(details only, no copy to open)",
 };
 
@@ -415,6 +431,140 @@ export async function attachReceiptFor(
       replaced_photo: result.replacedFiles.some((p) => p.endsWith(".jpg")),
       ...(prepared.fallback ? { copy_not_saved: prepared.fallback } : {}),
     },
+  };
+}
+
+const dollars = (cents: number | null | undefined) =>
+  cents == null ? null : cents / 100;
+
+/** A total as a person reads it: "$212.40", or "145.17 EUR" in another currency. */
+const totalLabel = (cents: number, currency: string | null) =>
+  currency && currency !== "CAD"
+    ? `${(cents / 100).toFixed(2)} ${currency}`
+    : formatMoney(cents);
+
+/** What the reader is given for a saved copy, or null when it can't be read. */
+async function readableCopy(
+  saved: SavedReceipt,
+): Promise<ReadableReceipt | null> {
+  if (!saved.pathname) return null;
+  if (saved.kind === "file" && !isReadableText(saved.fileName ?? "", "")) {
+    return null;
+  }
+  const stored = await readReceiptFile(saved.pathname);
+  if (!stored || stored.length === 0) return null;
+  if (saved.kind === "pdf") {
+    const bytes = servableBytes(stored, "pdf");
+    return bytes ? { kind: "pdf", bytes } : null;
+  }
+  if (saved.kind === "photo") {
+    return { kind: "jpeg", bytes: servableBytes(stored, "jpeg") ?? stored };
+  }
+  const text = new TextDecoder().decode(stored);
+  return {
+    kind: "text",
+    text: saved.kind === "email" ? emailHtmlToText(text) : text,
+  };
+}
+
+const fieldsData = (fields: ScannedFields) => ({
+  merchant: fields.merchant ?? null,
+  purchased_on: fields.purchasedOn ?? null,
+  subtotal: dollars(fields.subtotalCents),
+  tax: dollars(fields.taxCents),
+  total: dollars(fields.totalCents),
+  currency: fields.currency ?? null,
+  text: fields.rawText ?? null,
+});
+
+/**
+ * read_receipt: what a saved receipt says (as read when it was saved), and
+ * with `read_file` a fresh AI reading of its PDF, photo or email. Changes
+ * nothing: to fix an expense's amount from it, ask the user, then edit_expense.
+ */
+export async function readSavedReceiptFor(
+  caller: Caller,
+  args: unknown,
+): Promise<ToolResult> {
+  const input = readReceiptInputSchema.parse(args);
+  const saved = input.expense_id
+    ? await selectExpenseSavedReceipt(caller.userId, input.expense_id)
+    : await selectPendingSavedReceipt(caller.userId, String(input.pending_id));
+  if (!saved) {
+    return {
+      summary:
+        "No receipt saved with that item (or no item with that id). Check the id with list_expenses.",
+      data: {},
+      isError: true,
+    };
+  }
+
+  const data: Record<string, unknown> = {
+    receipt_kind: saved.kind,
+    file_name: saved.fileName,
+    email: saved.emailSubject
+      ? {
+          subject: saved.emailSubject,
+          from: saved.emailFrom,
+          date: saved.emailDate,
+        }
+      : null,
+    saved_reading: fieldsData({
+      merchant: saved.merchant ?? undefined,
+      purchasedOn: saved.purchasedOn ?? undefined,
+      subtotalCents: saved.subtotalCents ?? undefined,
+      taxCents: saved.taxCents ?? undefined,
+      totalCents: saved.totalCents ?? undefined,
+      currency: saved.currency ?? undefined,
+      rawText: saved.rawText ?? undefined,
+    }),
+  };
+
+  if (!input.read_file) {
+    const total =
+      saved.totalCents == null
+        ? "No total was read off it when it was saved."
+        : `It says ${totalLabel(saved.totalCents, saved.currency)}.`;
+    return {
+      summary: `The ${receiptKindLabel(saved.kind)}. ${total} Pass read_file: true to read the file itself again.`,
+      data,
+    };
+  }
+
+  const readable = await readableCopy(saved);
+  if (!readable) {
+    return {
+      summary: `This ${receiptKindLabel(saved.kind)} has no file that can be read (only a PDF, photo, email or text file can be).`,
+      data: { ...data, read: "unreadable" },
+    };
+  }
+  const claim = await claimReceiptScan(caller.userId);
+  if (!claim.allowed) {
+    return {
+      summary: claim.message,
+      data: {
+        ...data,
+        read: "limited",
+        retry_after_seconds: claim.retryAfterSeconds,
+      },
+      isError: true,
+    };
+  }
+  const scan = await readReceiptSafely(readable);
+  if (scan.unavailable) {
+    return {
+      summary: "Reading receipts is unavailable right now. Try again later.",
+      data: { ...data, read: "unavailable" },
+      isError: true,
+    };
+  }
+  const total =
+    scan.fields.totalCents === undefined
+      ? "No total could be read off it."
+      : `It reads ${totalLabel(scan.fields.totalCents, scan.fields.currency ?? null)}.`;
+  return {
+    summary: `Read the ${receiptKindLabel(saved.kind)}. ${total} Nothing was changed: to fix the expense's amount, tell the user and ask (in CAD, what their card was charged, if it's another currency), then call edit_expense.`,
+    data: { ...data, read: "read", reading: fieldsData(scan.fields) },
   };
 }
 

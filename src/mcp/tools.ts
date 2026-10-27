@@ -69,6 +69,7 @@ import {
   friendly,
   preparedKind,
   prepareReceipt,
+  readSavedReceiptFor,
   receiptNote,
   storePreparedReceipt,
 } from "@/mcp/receipts";
@@ -395,6 +396,13 @@ export async function markExpensePaid(
     };
   }
   return notFound("expense or pending item", "list_expenses");
+}
+
+export function readReceipt(
+  caller: McpCaller,
+  args: unknown,
+): Promise<ToolResult> {
+  return friendly(() => readSavedReceiptFor(caller, args));
 }
 
 export function attachReceipt(
