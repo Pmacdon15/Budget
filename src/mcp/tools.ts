@@ -1,9 +1,12 @@
 import "server-only";
+import {
+  createBillFromExpenseFor,
+  payBillWithExpenseFor,
+} from "@/dal/expense-bills";
 import { updateFixedItemFor } from "@/dal/fixed-items";
 import { selectBankBalance, upsertBankBalance } from "@/db/bank-balance";
 import {
   insertBillPayment,
-  linkExpenseToBillRow,
   selectPaidBillIds,
   unlinkExpenseFromBillRow,
 } from "@/db/bill-payments";
@@ -59,7 +62,6 @@ import {
   toCents,
   unlinkFixedBillInputSchema,
 } from "@/lib/pending-expenses";
-import { receiptKindLabel } from "@/lib/receipt-files";
 import type { FixedItem } from "@/lib/types";
 import {
   attachReceiptFor,
@@ -67,6 +69,7 @@ import {
   friendly,
   preparedKind,
   prepareReceipt,
+  receiptNote,
   storePreparedReceipt,
 } from "@/mcp/receipts";
 
@@ -271,9 +274,7 @@ async function addExpenseFor(
     input.unpaid
       ? "Marked not paid yet: it stays off the bank balance until mark_expense_paid."
       : null,
-    prepared
-      ? `Receipt attached (${receiptKindLabel(preparedKind(prepared))}).`
-      : null,
+    prepared ? receiptNote(prepared) : null,
   ].filter(Boolean);
   return {
     summary: `Sent to Pending Review: ${input.merchant}, $${input.amount.toFixed(2)} on ${input.date} (${input.category}). The user approves it in Budget at ${REVIEW_URL} before it counts as an expense.${notes.length ? ` ${notes.join(" ")}` : ""}`,
@@ -611,22 +612,20 @@ export async function markBillPaid(
         isError: true,
       };
     }
-    let target = bill;
-    if (input.update_amount && expense.amountCents !== bill.amountCents) {
-      await updateFixedItemFor(caller.userId, bill.id, {
-        name: bill.name,
-        category: isCategory(bill.category) ? bill.category : "Other",
-        amount: expense.amountCents,
-        dueDay: bill.dueDay,
-        month: input.month,
-        isEstimate: false,
-        matchKeywords: undefined,
-      });
-      target =
-        (await selectFixedItemInMonth(caller.userId, bill.id, input.month)) ??
-        bill;
+    const paid = await payBillWithExpenseFor(caller.userId, bill.id, expense, {
+      updateAmount: input.update_amount,
+    });
+    if (!paid.ok) {
+      return {
+        summary:
+          paid.reason === "paid_by_other"
+            ? `${bill.name} is already paid for ${input.month} by another expense. Call unlink_fixed_bill on that one first if this is the real payment, so the month isn't counted twice.`
+            : `${bill.name} isn't a bill in ${input.month}, so it can't be marked paid then.`,
+        data: { ...billData(bill), expense_id: expense.id },
+        isError: true,
+      };
     }
-    await linkExpenseToBillRow(caller.userId, expense.id, target.id);
+    const target = paid.bill;
     return {
       summary: `Marked ${bill.name} paid for ${input.month} with "${expense.description}" (${money(expense.amountCents)}). The expense is now the bill's payment, so it counts once.${input.update_amount && expense.amountCents !== bill.amountCents ? ` The bill is now ${money(expense.amountCents)} from ${input.month} on.` : ""}`,
       data: {
@@ -721,22 +720,17 @@ export async function convertExpenseToFixedBill(
       isError: true,
     };
   }
-  const category =
-    input.category ??
-    (isCategory(expense.category) ? expense.category : "Other");
-  const name = input.name ?? expense.description;
-  const billId = await insertFixedItem(caller.userId, {
-    name,
-    category,
-    amountCents: expense.amountCents,
-    dueDay: input.due_day ?? Number(expense.spentOn.slice(8, 10)),
-    startMonth: expense.month,
-    merchant: input.merchant || null,
-    matchKeywords: cleanKeywords(
-      input.match_keywords ?? [input.merchant ?? expense.description],
-    ),
-  });
-  await linkExpenseToBillRow(caller.userId, expense.id, billId);
+  const { billId, name } = await createBillFromExpenseFor(
+    caller.userId,
+    expense,
+    {
+      name: input.name,
+      category: input.category,
+      dueDay: input.due_day,
+      merchant: input.merchant,
+      matchKeywords: input.match_keywords,
+    },
+  );
   return {
     summary: `Made "${name}" a fixed bill of ${money(expense.amountCents)} a month from ${expense.month}, with this expense as its first paid month.`,
     data: {

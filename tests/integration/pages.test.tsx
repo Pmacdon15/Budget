@@ -48,6 +48,17 @@ const render = async (
   month = MONTH,
 ) => textOf(await renderPage(Page({ searchParams: searchParams(month) })));
 
+/** `aria-label` → `href` for the stat cards' heading links. */
+function statLinks(html: string) {
+  return Object.fromEntries(
+    [...html.matchAll(/<a\b[^>]*>/g)].flatMap(([tag]) => {
+      const label = /aria-label="(Go to [^"]+)"/.exec(tag)?.[1];
+      const href = /href="([^"]+)"/.exec(tag)?.[1];
+      return label && href ? [[label, href.replace(/&amp;/g, "&")]] : [];
+    }),
+  );
+}
+
 describe("Overview page", () => {
   it("welcomes a brand-new user with setup steps", async () => {
     const text = await render(OverviewPage);
@@ -71,6 +82,29 @@ describe("Overview page", () => {
     expect(text).toContain("Day 1");
     expect(text).toContain("Costco run");
     expect(text).not.toContain("Welcome to Budget");
+  });
+
+  it("links the Take-home, Fixed bills and Spending cards to their pages, keeping the month", async () => {
+    await seedMonth();
+    const html = await renderPage(
+      OverviewPage({ searchParams: searchParams(MONTH) }),
+    );
+    const links = statLinks(html);
+    expect(links).toEqual({
+      "Go to Take-home": `/income?month=${MONTH}`,
+      "Go to Fixed bills": `/fixed?month=${MONTH}`,
+      "Go to Spending": `/expenses?month=${MONTH}`,
+    });
+    // Left over stays a plain card.
+    expect(html).not.toContain('aria-label="Go to Left over"');
+    expect(textOf(html)).toContain("Left over");
+  });
+
+  it("keeps a different selected month on the card links", async () => {
+    const html = await renderPage(
+      OverviewPage({ searchParams: searchParams("2026-11") }),
+    );
+    expect(statLinks(html)["Go to Spending"]).toBe("/expenses?month=2026-11");
   });
 
   it("nudges for take-home when this month has none, suggesting last time's", async () => {

@@ -6,9 +6,10 @@
  * reads as missing, and the pathname is whatever that row holds.
  */
 
-import { get } from "@vercel/blob";
 import { UnauthorizedError } from "@/dal/errors";
 import { getReceiptImagePathname } from "@/dal/expenses";
+import { IMAGE_CONTENT_TYPE } from "@/lib/receipt-image";
+import { readReceiptFile } from "@/lib/receipt-store";
 import { idSchema } from "@/lib/schemas";
 
 /** One answer for every refusal, so a probe can't tell the cases apart. */
@@ -32,19 +33,21 @@ export async function GET(
   }
   if (!pathname) return notFound();
 
-  let result: Awaited<ReturnType<typeof get>>;
+  let bytes: Uint8Array | null;
   try {
-    result = await get(pathname, { access: "private" });
+    bytes = await readReceiptFile(pathname);
   } catch (error) {
     console.error("reading a receipt photo failed", error);
     return new Response("Bad gateway", { status: 502 });
   }
-  if (result?.statusCode !== 200) return notFound();
+  if (!bytes || bytes.length === 0) return notFound();
 
-  return new Response(result.stream, {
+  return new Response(new Uint8Array(bytes), {
     headers: {
-      "Content-Type": result.blob.contentType,
-      "Content-Length": String(result.blob.size),
+      // Photos are always stored as JPEGs. The length is that of the bytes
+      // sent, never one the store reported (see readReceiptFile).
+      "Content-Type": IMAGE_CONTENT_TYPE,
+      "Content-Length": String(bytes.length),
       // Private bytes: nothing in between may keep a copy.
       "Cache-Control": "private, no-cache",
       "X-Content-Type-Options": "nosniff",

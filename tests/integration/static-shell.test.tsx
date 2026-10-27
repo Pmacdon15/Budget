@@ -89,6 +89,20 @@ describe("static shell", () => {
     }
   });
 
+  it("links the overview's Take-home, Fixed bills and Spending cards in the shell", async () => {
+    const html = await shellOf(path.join(APP_DIR, "page.tsx"));
+    for (const [label, href] of [
+      ["Take-home", "/income"],
+      ["Fixed bills", "/fixed"],
+      ["Spending", "/expenses"],
+    ]) {
+      expect(html).toMatch(
+        new RegExp(`<a[^>]*href="${href}"[^>]*aria-label="Go to ${label}"`),
+      );
+    }
+    expect(html).not.toContain('aria-label="Go to Left over"');
+  });
+
   it("keeps the take-home page's labels and table header in the shell", async () => {
     const text = textOf(await shellOf(path.join(APP_DIR, "income/page.tsx")));
     for (const label of [
