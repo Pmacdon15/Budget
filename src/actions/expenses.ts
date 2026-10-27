@@ -33,6 +33,14 @@ export async function setExpenseAmount(id: string, amount: string) {
   });
 }
 
+/**
+ * Nothing to change: the upload route already saved the receipt. Running an
+ * action revalidates the page so the expense shows its new receipt link.
+ */
+export async function refreshAfterReceiptUpload() {
+  return runAction(async () => {});
+}
+
 export async function deleteExpense(id: string) {
   return runAction(async () => {
     await dal.deleteExpense(idSchema.parse(id));

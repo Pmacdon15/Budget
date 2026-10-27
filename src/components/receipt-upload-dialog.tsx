@@ -1,9 +1,9 @@
 "use client";
 
 import { FileUp, Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useId, useState } from "react";
 import { toast } from "sonner";
+import { refreshAfterReceiptUpload } from "@/actions/expenses";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -93,7 +93,6 @@ export function ReceiptUploadDialog({
   expense: Expense;
   trigger: React.ReactElement;
 }) {
-  const router = useRouter();
   const inputId = useId();
   const amountId = useId();
   const [open, setOpen] = useState(false);
@@ -124,7 +123,8 @@ export function ReceiptUploadDialog({
     try {
       const { blob, name } = await prepare(file);
       setResult(await uploadReceipt(expense.id, blob, name));
-      router.refresh();
+      // Shows the new receipt link: a server action revalidates the page.
+      await refreshAfterReceiptUpload();
     } catch (cause) {
       setError(
         cause instanceof Error
