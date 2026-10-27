@@ -22,6 +22,7 @@ import {
   listFixedBillsInputSchema,
   markBillPaidInputSchema,
   markExpensePaidInputSchema,
+  readReceiptInputSchema,
   syncBankBalanceInputSchema,
   unlinkFixedBillInputSchema,
 } from "@/lib/pending-expenses";
@@ -54,6 +55,7 @@ import {
   type McpCaller,
   markBillPaid,
   markExpensePaid,
+  readReceipt,
   syncBankBalance,
   type ToolResult,
   unlinkFixedBill,
@@ -276,6 +278,19 @@ export function registerBudgetTools(server: McpServer) {
     },
     (args, ctx) =>
       run(server, ctx.http?.authInfo, (caller) => attachReceipt(caller, args)),
+  );
+
+  server.registerTool(
+    "read_receipt",
+    {
+      title: "Read a saved receipt",
+      description:
+        "What a saved expense's (expense_id) or pending item's (pending_id) receipt says: merchant, date, amounts, currency and text, as read when it was saved, including files the user uploaded in Budget. With read_file: true, reads its PDF, photo or email with AI now (uses one receipt scan). Changes nothing: to fix an amount from it, ask the user (for another currency, what their card was charged in CAD), then call edit_expense.",
+      inputSchema: portable(readReceiptInputSchema),
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    (args, ctx) =>
+      run(server, ctx.http?.authInfo, (caller) => readReceipt(caller, args)),
   );
 
   server.registerTool(

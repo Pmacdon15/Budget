@@ -66,6 +66,8 @@ export type ScannedFields = {
   totalCents?: number;
   subtotalCents?: number;
   taxCents?: number;
+  /** ISO 4217 code the amounts are in, when the receipt says (EUR, USD, ...). */
+  currency?: string;
   category?: Category;
   rawText?: string;
   /** Set when the items span two or more categories; adds up to the total. */

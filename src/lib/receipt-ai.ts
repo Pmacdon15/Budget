@@ -5,7 +5,8 @@ import { parseMoney } from "@/lib/money";
 import type { ReceiptSplit, ScannedFields, ScanResult } from "@/lib/types";
 
 /**
- * Reads a receipt photo with Claude's vision model.
+ * Reads a receipt with Claude: a photo, a PDF (an invoice or bill), or the
+ * text of an email.
  *
  * The model is given one tool it must call, whose input schema is the shape we
  * want back, so the answer arrives structured rather than as prose. Every
@@ -54,10 +55,12 @@ const CATEGORY_GUIDE = CATEGORIES.map((c) =>
     : `- ${c.name} (shown as "${c.label}"): ${c.hint}`,
 ).join("\n");
 
-const PROMPT = `Read this receipt photo and record it with the ${TOOL_NAME} tool.
+const PROMPT = `Read this receipt (a photo, a PDF invoice or bill, or an email) and record it with the ${TOOL_NAME} tool.
 
 Rules:
 - Amounts are plain numbers in the receipt's currency (42.17), never strings.
+- currency is the ISO 4217 code the amounts are in (CAD, USD, EUR, ...). Set it when the receipt says or clearly shows it (a € sign, "USD", a French invoice in euros). Leave it out when it only shows a bare $ with nothing to say which dollar.
+- total is the amount charged, including tax and shipping (on a French invoice, the "Total TTC").
 - purchased_on is the purchase date as YYYY-MM-DD. Leave it out if you cannot read it.
 - Leave out any field you cannot read rather than guessing.
 - merchant is the store or business name as a person would say it ("Costco", not "COSTCO WHOLESALE #552").
@@ -74,11 +77,11 @@ much of the total went to it. Share tax and fees across the categories in
 proportion to their items, so the split amounts add up exactly to the total.
 If everything belongs to one category, leave "splits" out.`;
 
-const SYSTEM = `You read receipt photos for a budgeting app. Always answer by calling the ${TOOL_NAME} tool exactly once, even if the photo is blurry or only partly readable (leave out what you can't read). Never answer in plain text.`;
+const SYSTEM = `You read receipts (photos, PDFs and emails) for a budgeting app. Always answer by calling the ${TOOL_NAME} tool exactly once, even if the photo is blurry or only partly readable (leave out what you can't read). Never answer in plain text.`;
 
 const TOOL = {
   name: TOOL_NAME,
-  description: "Record the fields read off a receipt photo.",
+  description: "Record the fields read off a receipt.",
   input_schema: {
     type: "object",
     properties: {
@@ -87,6 +90,10 @@ const TOOL = {
       subtotal: { type: "number" },
       tax: { type: "number", description: "All taxes combined." },
       total: { type: "number", description: "Amount paid." },
+      currency: {
+        type: "string",
+        description: "ISO 4217 code of the amounts, e.g. CAD, USD, EUR.",
+      },
       category: { type: "string", enum: CATEGORY_NAMES },
       raw_text: { type: "string" },
       splits: {
@@ -152,12 +159,53 @@ export async function resolveEndpoint(
   return null;
 }
 
-/** Reads what it can off a JPEG. Throws on an API failure; see `readReceiptSafely`. */
+/**
+ * What the reader can read: a JPEG photo, a PDF, or an email's text. A bare
+ * byte array is a JPEG, as the scan route has always sent.
+ */
+export type ReadableReceipt =
+  | { kind: "jpeg"; bytes: Uint8Array }
+  | { kind: "pdf"; bytes: Uint8Array }
+  | { kind: "text"; text: string };
+
+/** Characters of an email's text sent to the reader: more than any receipt needs. */
+export const MAX_TEXT_CHARS = 60_000;
+
+const readable = (receipt: Uint8Array | ReadableReceipt): ReadableReceipt =>
+  receipt instanceof Uint8Array ? { kind: "jpeg", bytes: receipt } : receipt;
+
+const isEmpty = (receipt: ReadableReceipt) =>
+  receipt.kind === "text"
+    ? receipt.text.trim() === ""
+    : receipt.bytes.byteLength === 0;
+
+/** The message part that carries the receipt itself. */
+function receiptBlock(receipt: ReadableReceipt) {
+  if (receipt.kind === "text") {
+    return {
+      type: "text",
+      text: `The receipt email:\n\n${receipt.text.slice(0, MAX_TEXT_CHARS)}`,
+    };
+  }
+  const data = Buffer.from(receipt.bytes).toString("base64");
+  return receipt.kind === "pdf"
+    ? {
+        type: "document",
+        source: { type: "base64", media_type: "application/pdf", data },
+      }
+    : {
+        type: "image",
+        source: { type: "base64", media_type: "image/jpeg", data },
+      };
+}
+
+/** Reads what it can off a receipt. Throws on an API failure; see `readReceiptSafely`. */
 export async function readReceipt(
-  image: Uint8Array,
+  input: Uint8Array | ReadableReceipt,
   deps: ReadDeps = {},
 ): Promise<ScanResult> {
-  if (image.byteLength === 0) return NOT_RECOGNISED;
+  const receipt = readable(input);
+  if (isEmpty(receipt)) return NOT_RECOGNISED;
   const endpoint = await resolveEndpoint(deps);
   if (!endpoint) return UNAVAILABLE;
 
@@ -179,17 +227,7 @@ export async function readReceipt(
       messages: [
         {
           role: "user",
-          content: [
-            {
-              type: "image",
-              source: {
-                type: "base64",
-                media_type: "image/jpeg",
-                data: Buffer.from(image).toString("base64"),
-              },
-            },
-            { type: "text", text: PROMPT },
-          ],
+          content: [receiptBlock(receipt), { type: "text", text: PROMPT }],
         },
       ],
     }),
@@ -218,11 +256,11 @@ export async function readReceipt(
  * reading is down rather than blaming the photo.
  */
 export async function readReceiptSafely(
-  image: Uint8Array,
+  receipt: Uint8Array | ReadableReceipt,
   deps?: ReadDeps,
 ): Promise<ScanResult> {
   try {
-    return await readReceipt(image, deps);
+    return await readReceipt(receipt, deps);
   } catch (error) {
     console.error("reading the receipt failed", error);
     return UNAVAILABLE;
@@ -236,6 +274,13 @@ function toCents(value: unknown): number | undefined {
   const text = typeof value === "number" ? value.toFixed(2) : value;
   const cents = parseMoney(text);
   return cents === null ? undefined : cents;
+}
+
+/** An ISO 4217 code ("EUR"), upper-cased, or undefined. Exported for tests. */
+export function toCurrency(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const code = value.trim().toUpperCase();
+  return /^[A-Z]{3}$/.test(code) ? code : undefined;
 }
 
 function toText(value: unknown, max: number): string | undefined {
@@ -260,6 +305,8 @@ export function toScanResult(input: Record<string, unknown>): ScanResult {
   const subtotal = toCents(input.subtotal);
   const tax = toCents(input.tax);
   if (total !== undefined) fields.totalCents = total;
+  const currency = toCurrency(input.currency);
+  if (currency) fields.currency = currency;
   if (subtotal !== undefined) fields.subtotalCents = subtotal;
   if (tax !== undefined) fields.taxCents = tax;
 

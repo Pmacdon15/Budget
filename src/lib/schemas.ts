@@ -88,6 +88,9 @@ export const incomeSchema = z.object({
     .pipe(date.nullable()),
 });
 
+/** "Use this amount" after uploading a receipt: only the amount changes. */
+export const expenseAmountSchema = z.object({ amount: money });
+
 export const expenseSchema = z.object({
   description: text("Description"),
   category,

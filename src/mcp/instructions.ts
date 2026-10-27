@@ -19,6 +19,8 @@ Receipts: Budget keeps a copy of the bill or receipt email that the user can ope
 - It has a JPEG image of the receipt instead: send it as image_jpeg_base64. 3MB at most.
 - It has no attachment: send the email itself as email.html (or email.text if it has no HTML). Budget removes scripts and remote images before saving it.
 To add or replace a receipt on something already recorded, call attach_receipt with expense_id, pending_id, or fixed_bill_id and month for a fixed bill's payment (mark it paid first). Sending the same email again is safe: attach_receipt answers "already_attached" and saves nothing new, and add_expense answers "possible_duplicate" for an email already saved with another item.
+Amounts in another currency (EUR, USD, ...): send the receipt's currency, and ask the user what their card was charged in CAD for the expense's amount.
+To see what a saved receipt says (including a PDF or file the user uploaded in Budget), call read_receipt with expense_id or pending_id; add read_file: true to read the file itself with AI. It changes nothing: to fix an amount from it, ask the user, then call edit_expense.
 
 Fixed bills: these are charges that repeat every month (rent, phone, internet, subscriptions). The user may have none yet, or may have entered them as estimates.
 - Before adding any charge that might repeat, call find_matching_fixed_bill (add_expense also checks, and answers "matches_fixed_bill" without saving). Then:

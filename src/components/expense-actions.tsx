@@ -1,10 +1,11 @@
 "use client";
 
-import { CalendarSync } from "lucide-react";
+import { CalendarSync, FileUp } from "lucide-react";
 import { MakeFixedBillDialog } from "@/components/expense-bills/make-fixed-bill-dialog";
 import { ConfirmAction } from "@/components/forms/confirm-action";
 import { ExpenseDialog } from "@/components/forms/expense-dialog";
-import { RowActions } from "@/components/row-actions";
+import { ReceiptUploadDialog } from "@/components/receipt-upload-dialog";
+import { type RowAction, RowActions } from "@/components/row-actions";
 import { useUndoToast } from "@/components/undo-toast";
 import type { BillMatch } from "@/lib/bill-matching";
 import type { Expense } from "@/lib/types";
@@ -32,21 +33,32 @@ export function ExpenseActions({
           trigger={trigger}
         />
       )}
-      extra={
-        canMakeBill
-          ? {
-              label: "Make fixed bill",
-              icon: <CalendarSync />,
-              render: (trigger) => (
-                <MakeFixedBillDialog
-                  expense={expense}
-                  match={billMatch}
-                  trigger={trigger}
-                />
-              ),
-            }
-          : undefined
-      }
+      extra={[
+        {
+          label: expense.receiptId
+            ? "Replace receipt file"
+            : "Add receipt file",
+          icon: <FileUp />,
+          render: (trigger) => (
+            <ReceiptUploadDialog expense={expense} trigger={trigger} />
+          ),
+        },
+        ...(canMakeBill
+          ? [
+              {
+                label: "Make fixed bill",
+                icon: <CalendarSync />,
+                render: (trigger) => (
+                  <MakeFixedBillDialog
+                    expense={expense}
+                    match={billMatch}
+                    trigger={trigger}
+                  />
+                ),
+              } satisfies RowAction,
+            ]
+          : []),
+      ]}
       renderDelete={(trigger) => (
         <ConfirmAction
           trigger={trigger}
