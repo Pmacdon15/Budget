@@ -1,16 +1,1 @@
-"use client";
-
-import { useMutation } from "@tanstack/react-query";
-import { markBillPaid, unmarkBillPaid } from "@/actions/bill-payments";
-import { type ActionError, unwrap } from "@/mutations/action-error";
-
-type Variables = { fixedItemId: string; month: string; paid: boolean };
-
-/** Marks a bill paid for a month (`paid: true`) or takes the mark off. */
-export function useSetBillPaid() {
-  return useMutation<void, ActionError, Variables>({
-    mutationKey: ["bill-payments", "set"],
-    mutationFn: async ({ paid, ...values }) =>
-      unwrap(await (paid ? markBillPaid(values) : unmarkBillPaid(values))),
-  });
-}
+InVzZSBjbGllbnQiOwoKaW1wb3J0IHsgdXNlTXV0YXRpb24gfSBmcm9tICJAdGFuc3RhY2svcmVhY3QtcXVlcnkiOwppbXBvcnQgeyBtYXJrQmlsbFBhaWQsIHVubWFya0JpbGxQYWlkIH0gZnJvbSAiQC9hY3Rpb25zL2JpbGwtcGF5bWVudHMiOwppbXBvcnQgeyB0eXBlIEFjdGlvbkVycm9yLCB1bndyYXAgfSBmcm9tICJAL211dGF0aW9ucy9hY3Rpb24tZXJyb3IiOwoKdHlwZSBWYXJpYWJsZXMgPSB7CiAgZml4ZWRJdGVtSWQ6IHN0cmluZzsKICBtb250aDogc3RyaW5nOwogIHBhaWQ6IGJvb2xlYW47CiAgLyoqIE9ubHkgdXNlZCB3aGVuIG1hcmtpbmcgcGFpZDogd2hldGhlciB0aGUgbW9uZXkgY2FtZSBvZmYgdGhlIGJhbmsgYWNjb3VudC4gKi8KICBvZmZCYW5rQWNjb3VudD86IGJvb2xlYW47Cn07CgovKiogTWFya3MgYSBiaWxsIHBhaWQgZm9yIGEgbW9udGggKGBwYWlkOiB0cnVlYCkgb3IgdGFrZXMgdGhlIG1hcmsgb2ZmLiAqLwpleHBvcnQgZnVuY3Rpb24gdXNlU2V0QmlsbFBhaWQoKSB7CiAgcmV0dXJuIHVzZU11dGF0aW9uPHZvaWQsIEFjdGlvbkVycm9yLCBWYXJpYWJsZXM+KHsKICAgIG11dGF0aW9uS2V5OiBbImJpbGwtcGF5bWVudHMiLCAic2V0Il0sCiAgICBtdXRhdGlvbkZuOiBhc3luYyAoeyBwYWlkLCAuLi52YWx1ZXMgfSkgPT4KICAgICAgdW53cmFwKGF3YWl0IChwYWlkID8gbWFya0JpbGxQYWlkKHZhbHVlcykgOiB1bm1hcmtCaWxsUGFpZCh2YWx1ZXMpKSksCiAgfSk7Cn0K
