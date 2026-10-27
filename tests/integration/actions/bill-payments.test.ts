@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { setBankBalance } from "@/actions/bank-balance";
 import { markBillPaid, unmarkBillPaid } from "@/actions/bill-payments";
 import {
   createFixedItem,
   stopFixedItem,
   updateFixedItem,
 } from "@/actions/fixed-items";
+import { getBankBalance } from "@/dal/bank-balance";
 import { getPaidBillIds } from "@/dal/bill-payments";
 import { getFixedItems } from "@/dal/fixed-items";
 import { getMonthOverview } from "@/dal/overview";
@@ -133,5 +135,42 @@ describe("marking bills paid", () => {
     await markBillPaid({ fixedItemId: rent.id, month: "2026-03" });
     await stopFixedItem(rent.id, "2026-03");
     expect(await rows("select * from fixed_item_payments")).toHaveLength(0);
+  });
+});
+
+describe("marking bills paid and the bank balance", () => {
+  /** Enters a balance and marks it as entered on Oct 1, before the marks. */
+  async function enterBalance(balance: string) {
+    await setBankBalance({ balance });
+    await rows("update accounts set balance_as_of = $1 where user_id = $2", [
+      "2026-10-01T18:00:00Z",
+      "user_a",
+    ]);
+  }
+
+  it("takes the amount off the bank balance by default", async () => {
+    const rent = await createRent();
+    await enterBalance("2000");
+    await markBillPaid({ fixedItemId: rent.id, month: "2026-03" });
+    expect((await getBankBalance())?.balanceCents).toBe(50_000);
+  });
+
+  it("leaves the balance alone when it didn't come off the account", async () => {
+    const rent = await createRent();
+    await enterBalance("2000");
+    expect(
+      await markBillPaid({
+        fixedItemId: rent.id,
+        month: "2026-03",
+        offBankAccount: false,
+      }),
+    ).toEqual({ ok: true });
+    // The bill still counts as paid for the month...
+    expect(await paidIn("2026-03")).toEqual([rent.id]);
+    // ...but the payment carries no day and no amount, so nothing comes off.
+    const [payment] = await rows("select * from fixed_item_payments");
+    expect(payment?.paid_on).toBeNull();
+    expect(payment?.amount_cents).toBeNull();
+    expect((await getBankBalance())?.balanceCents).toBe(200_000);
   });
 });
