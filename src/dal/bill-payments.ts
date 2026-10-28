@@ -30,10 +30,16 @@ export async function markBillPaid(input: BillPaymentInput) {
   const item = await selectFixedItem(userId, input.fixedItemId);
   if (!item || !isActive(item, input.month)) throw new NotFoundError();
   // Marked paid today, for the bill's amount: it comes off the bank balance.
-  await insertBillPayment(userId, item.id, input.month, {
-    paidOn: today(),
-    amountCents: item.amountCents,
-  });
+  // When the money didn't come off the bank account, the mark is bookkeeping
+  // only (no day, no amount), so the balance doesn't move.
+  await insertBillPayment(
+    userId,
+    item.id,
+    input.month,
+    input.offBankAccount === false
+      ? {}
+      : { paidOn: today(), amountCents: item.amountCents },
+  );
 }
 
 /** Takes the paid mark off again (and its bank balance debit). The bill still counts toward the month. */
