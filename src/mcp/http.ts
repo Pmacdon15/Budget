@@ -1,5 +1,8 @@
 import type { AuthInfo } from "@modelcontextprotocol/server";
 import { getPublicOrigin } from "mcp-handler";
+import { MCP_SCOPES } from "@/mcp/oauth-config";
+
+export { MCP_SCOPES };
 
 /*
  * The HTTP edge of the MCP server, written to the MCP and OAuth specs rather
@@ -20,14 +23,30 @@ export const MCP_PATH = "/api/mcp";
 export const PROTECTED_RESOURCE_METADATA_PATH =
   "/.well-known/oauth-protected-resource";
 
+/**
+ * The origin MCP clients connect to. In production that's always the
+ * project's production domain (budget.patmac.ca), even when the request came
+ * in on a per-deployment *.vercel.app host, so the `resource` an
+ * authorization server binds tokens to never changes between deployments.
+ * Previews and local runs answer with the host that was used, so a client
+ * pointed at a preview sees metadata that matches the URL it was given.
+ */
+export function publicOrigin(req: Request) {
+  const productionHost = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  if (process.env.VERCEL_ENV === "production" && productionHost) {
+    return `https://${productionHost.replace(/^https?:\/\//, "").replace(/\/+$/, "")}`;
+  }
+  return getPublicOrigin(req);
+}
+
 /** The canonical URL of the MCP server, as clients connect to it. */
 export function mcpResourceUrl(req: Request) {
-  return `${getPublicOrigin(req)}${MCP_PATH}`;
+  return `${publicOrigin(req)}${MCP_PATH}`;
 }
 
 /** Where this endpoint's protected resource metadata lives (RFC 9728 §3.1). */
 export function resourceMetadataUrl(req: Request) {
-  return `${getPublicOrigin(req)}${PROTECTED_RESOURCE_METADATA_PATH}${MCP_PATH}`;
+  return `${publicOrigin(req)}${PROTECTED_RESOURCE_METADATA_PATH}${MCP_PATH}`;
 }
 
 const ALLOWED_HEADERS = [
@@ -84,7 +103,9 @@ export function bearerToken(req: Request) {
 /**
  * A 401 telling the client to sign in. Without a token it's a bare challenge
  * (RFC 6750 §3.1); a rejected token adds `invalid_token`, which tells the
- * client to refresh or sign in again.
+ * client to refresh or sign in again. Both name the resource metadata
+ * (RFC 9728 §5.1) and the scopes to ask for (RFC 6750 §3, which the MCP
+ * authorization spec has clients prefer over guessing).
  */
 export function unauthorized(req: Request, invalidTokenReason?: string) {
   const params = [
@@ -95,6 +116,7 @@ export function unauthorized(req: Request, invalidTokenReason?: string) {
         ]
       : []),
     `resource_metadata="${resourceMetadataUrl(req)}"`,
+    `scope="${MCP_SCOPES.join(" ")}"`,
   ];
   return Response.json(
     invalidTokenReason
@@ -177,6 +199,16 @@ export type VerifyToken = (
 ) => Promise<AuthInfo | undefined>;
 
 /**
+ * Which app is calling, for the logs: its User-Agent, trimmed. Enough to tell
+ * Gemini's linking attempts from Claude's or ChatGPT's when one of them can't
+ * connect. Never the token.
+ */
+export function callerLabel(req: Request) {
+  const agent = req.headers.get("user-agent")?.replace(/\s+/g, " ").trim();
+  return agent ? agent.slice(0, 120) : "no user agent";
+}
+
+/**
  * The MCP route: CORS, bearer auth, then the MCP handler with the verified
  * auth on `req.auth`, where mcp-handler reads it.
  */
@@ -185,7 +217,12 @@ export function mcpRoute(handler: McpHandler, verifyToken: VerifyToken) {
     if (req.method === "OPTIONS") return preflight(req);
 
     const token = bearerToken(req);
-    if (!token) return withCors(unauthorized(req));
+    if (!token) {
+      console.info(
+        `MCP: ${req.method} without a bearer token, asked to sign in (${callerLabel(req)})`,
+      );
+      return withCors(unauthorized(req));
+    }
 
     let authInfo: AuthInfo | undefined;
     try {
@@ -194,6 +231,7 @@ export function mcpRoute(handler: McpHandler, verifyToken: VerifyToken) {
       console.error("MCP: couldn't verify the access token", error);
     }
     if (!authInfo) {
+      console.warn(`MCP: access token refused (${callerLabel(req)})`);
       return withCors(
         unauthorized(req, "The access token is invalid or has expired."),
       );
