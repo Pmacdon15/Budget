@@ -22,10 +22,10 @@ export function SpendingDonut({ categories }: { categories: CategoryTotal[] }) {
   ) satisfies ChartConfig;
 
   return (
-    <div className="grid items-center gap-6 sm:grid-cols-[minmax(0,220px)_1fr]">
+    <div className="grid items-center gap-4 sm:grid-cols-[240px_minmax(0,1fr)]">
       <ChartContainer
         config={config}
-        className="mx-auto aspect-square w-full max-w-[220px]"
+        className="mx-auto aspect-square w-full max-w-[240px]"
       >
         <PieChart>
           <ChartTooltip
@@ -50,7 +50,7 @@ export function SpendingDonut({ categories }: { categories: CategoryTotal[] }) {
             data={data}
             dataKey="value"
             nameKey="category"
-            innerRadius="62%"
+            innerRadius="64%"
             outerRadius="100%"
             paddingAngle={data.length > 1 ? 2 : 0}
             strokeWidth={0}
@@ -71,7 +71,7 @@ export function SpendingDonut({ categories }: { categories: CategoryTotal[] }) {
                     <tspan
                       x={viewBox.cx}
                       y={(viewBox.cy ?? 0) - 6}
-                      className="fill-foreground font-semibold text-xl"
+                      className="fill-foreground font-semibold text-2xl"
                     >
                       {formatMoneyCompact(total)}
                     </tspan>
@@ -89,18 +89,18 @@ export function SpendingDonut({ categories }: { categories: CategoryTotal[] }) {
           </Pie>
         </PieChart>
       </ChartContainer>
-      <ul className="grid gap-2 text-sm">
+      <ul className="grid min-w-0 gap-1.5 text-sm">
         {data.map((d) => (
-          <li key={d.category} className="flex items-center gap-2">
+          <li key={d.category} className="flex min-w-0 items-center gap-2">
             <span
               className="size-2.5 shrink-0 rounded-full"
               style={{ backgroundColor: d.fill }}
             />
-            <span className="truncate">{d.category}</span>
-            <span className="ml-auto text-muted-foreground tabular-nums">
+            <span className="min-w-0 flex-1 truncate">{d.category}</span>
+            <span className="w-9 shrink-0 text-right text-muted-foreground tabular-nums">
               {Math.round((d.value / total) * 100)}%
             </span>
-            <span className="w-24 text-right font-medium tabular-nums">
+            <span className="min-w-20 shrink-0 text-right font-medium tabular-nums">
               {formatMoney(d.value)}
             </span>
           </li>
