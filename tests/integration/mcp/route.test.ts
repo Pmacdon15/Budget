@@ -16,6 +16,7 @@ import { rows } from "../../helpers/test-db";
 const URL_ = "https://budget.patmac.ca/api/mcp";
 const METADATA_URL =
   "https://budget.patmac.ca/.well-known/oauth-protected-resource/api/mcp";
+const SCOPES = "profile email offline_access";
 
 function post(
   headers: Record<string, string>,
@@ -87,7 +88,9 @@ describe("MCP endpoint auth", () => {
   it("answers 401 with a bare challenge pointing to the endpoint's metadata when there's no token", async () => {
     const res = await initialize(null);
     expect(res.status).toBe(401);
-    expect(res.challenge).toBe(`Bearer resource_metadata="${METADATA_URL}"`);
+    expect(res.challenge).toBe(
+      `Bearer resource_metadata="${METADATA_URL}", scope="${SCOPES}"`,
+    );
     expect(res.headers.get("access-control-allow-origin")).toBe("*");
     expect(res.headers.get("access-control-expose-headers")).toContain(
       "WWW-Authenticate",
@@ -107,6 +110,43 @@ describe("MCP endpoint auth", () => {
     expect(res.status).toBe(401);
     expect(res.challenge).toContain('error="invalid_token"');
     expect(res.challenge).toContain(`resource_metadata="${METADATA_URL}"`);
+    expect(res.challenge).toContain(`scope="${SCOPES}"`);
+  });
+
+  it("names the canonical domain in production, even on a deployment's own host", async () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("VERCEL_PROJECT_PRODUCTION_URL", "budget.patmac.ca");
+    const res = await POST(
+      new Request("https://budget-abc123-team.vercel.app/api/mcp", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      }),
+    );
+    expect(res.status).toBe(401);
+    expect(res.headers.get("www-authenticate")).toBe(
+      `Bearer resource_metadata="${METADATA_URL}", scope="${SCOPES}"`,
+    );
+  });
+
+  it("logs which app was asked to sign in, but never a token", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await POST(
+      new Request(URL_, {
+        method: "POST",
+        headers: { "user-agent": "Google-Gemini/1.0" },
+        body: "{}",
+      }),
+    );
+    expect(info.mock.calls.flat().join(" ")).toContain("Google-Gemini/1.0");
+    await post(
+      { authorization: "Bearer oat_secret_value", "user-agent": "Gemini" },
+      { jsonrpc: "2.0", id: 1, method: "ping" },
+    );
+    const logged = warn.mock.calls.flat().join(" ");
+    expect(logged).toContain("Gemini");
+    expect(logged).not.toContain("oat_secret_value");
   });
 
   it("rejects a key that doesn't exist", async () => {
@@ -151,6 +191,35 @@ describe("MCP endpoint auth", () => {
     expect(
       clerkOAuth.requests.map((r) => r.headers.get("authorization")),
     ).toEqual(Array(3).fill("Bearer eyJhbGciOi.jwt.token"));
+  });
+
+  it.each([
+    [
+      "created in the Clerk dashboard (Gemini's Client ID and secret)",
+      "oat_static",
+      "client_gemini_static",
+    ],
+    ["registered dynamically", "oat_dcr", "client_dcr_123"],
+    [
+      "identified by a metadata document",
+      "oat_cimd",
+      "https://claude.ai/oauth/client.json",
+    ],
+  ])("accepts a token from a client %s, scoped to the user who signed in", async (_kind, token, clientId) => {
+    clerkOAuth.tokens.set(token, { userId: "user_gemini", clientId });
+    const res = await callTool(token, "add_expense", {
+      amount: 9.99,
+      date: "2026-10-21",
+      merchant: "Tim Hortons",
+      category: "Food",
+    });
+    expect(res.status).toBe(200);
+    expect(await rows("select user_id from pending_expenses")).toEqual([
+      { user_id: "user_gemini" },
+    ]);
+    expect(clerkOAuth.requests.at(-1)?.headers.get("authorization")).toBe(
+      `Bearer ${token}`,
+    );
   });
 
   it("rejects an OAuth token Clerk doesn't accept", async () => {
@@ -356,6 +425,7 @@ describe("OAuth discovery", () => {
     expect(await res.json()).toEqual({
       resource: "https://budget.patmac.ca/api/mcp",
       authorization_servers: ["https://clerk.budget.example"],
+      scopes_supported: ["profile", "email", "offline_access"],
       bearer_methods_supported: ["header"],
       resource_name: "Budget",
       resource_documentation: "https://budget.patmac.ca/review",
@@ -371,6 +441,20 @@ describe("OAuth discovery", () => {
     );
     expect((await res.json()).resource).toBe(
       "https://budget-git-fix.vercel.app/api/mcp",
+    );
+  });
+
+  it("names the canonical resource in production, whichever host was used", async () => {
+    vi.stubEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", PK);
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("VERCEL_PROJECT_PRODUCTION_URL", "budget.patmac.ca");
+    const res = resourceMetadata(
+      new Request(
+        "https://budget-abc123-team.vercel.app/.well-known/oauth-protected-resource/api/mcp",
+      ),
+    );
+    expect((await res.json()).resource).toBe(
+      "https://budget.patmac.ca/api/mcp",
     );
   });
 
