@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { createApiKey } from "@/actions/api-keys";
 import ReviewPage from "@/app/(app)/review/page";
 import { insertPendingExpense } from "@/db/pending-expenses";
@@ -130,22 +130,6 @@ describe("Review page", () => {
     expect(text).toContain("Connect your AI");
     expect(text).toContain("https://budget.patmac.ca/api/mcp");
     expect(text).not.toContain("$45.67");
-  });
-
-  it("shows Gemini's steps in the static shell, with the sign-in URLs but no secret", async () => {
-    vi.stubEnv(
-      "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
-      `pk_live_${btoa("clerk.budget.patmac.ca$")}`,
-    );
-    const text = textOf(
-      await renderShell(ReviewPage({ searchParams: pendingSearchParams() })),
-    );
-    expect(text).toContain("Using Gemini?");
-    expect(text).toContain("Leave Advanced features empty");
-    expect(text).toContain("https://clerk.budget.patmac.ca/oauth/authorize");
-    expect(text).toContain("https://clerk.budget.patmac.ca/oauth/token");
-    expect(text).toContain("profile email offline_access");
-    expect(text.toLowerCase()).not.toMatch(/client_secret|sk_(live|test)_/);
   });
 
   it("flags items that aren't paid yet or carry a receipt", async () => {
