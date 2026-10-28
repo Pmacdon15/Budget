@@ -11,7 +11,6 @@ import {
 import { getApiKeys } from "@/dal/api-keys";
 import { CopyButton } from "./copy-button";
 import { CreateKeyDialog } from "./create-key-dialog";
-import { GeminiSteps } from "./gemini-steps";
 import { RevokeKeyButton } from "./revoke-key-button";
 
 export const MCP_URL = "https://budget.patmac.ca/api/mcp";
