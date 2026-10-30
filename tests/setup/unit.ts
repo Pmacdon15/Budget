@@ -10,3 +10,9 @@ vi.mock("next/cache", () => ({
   cacheTag: vi.fn(),
   cacheLife: vi.fn(),
 }));
+
+// `connection()` throws outside a request; in tests every call is "the request".
+vi.mock("next/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/server")>()),
+  connection: vi.fn(async () => {}),
+}));

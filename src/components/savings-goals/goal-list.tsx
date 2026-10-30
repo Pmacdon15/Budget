@@ -12,7 +12,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { getSavingsGoals } from "@/dal/savings-goals";
 import { formatMoney } from "@/lib/money";
-import { currentMonth } from "@/lib/month";
+import { requestMonth } from "@/lib/now";
 import {
   type GoalStatus,
   goalHint,
@@ -62,7 +62,7 @@ export async function GoalList({
   }
 
   // Pace is measured against the real current month, not the month being viewed.
-  const now = currentMonth();
+  const now = await requestMonth();
   return (
     <div className="grid gap-4 md:grid-cols-2">
       {goals.map((goal) => (

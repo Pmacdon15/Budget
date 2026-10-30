@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { requireUserId } from "@/dal/auth";
 import { selectFixedItems } from "@/db/fixed-items";
-import { today } from "@/lib/month";
+import { requestToday } from "@/lib/now";
 import { type UpcomingBill, upcomingBills } from "@/lib/upcoming-bills";
 
 /**
@@ -12,5 +12,5 @@ import { type UpcomingBill, upcomingBills } from "@/lib/upcoming-bills";
 export const getUpcomingBills = cache(async (): Promise<UpcomingBill[]> => {
   const userId = await requireUserId();
   const items = await selectFixedItems(userId);
-  return upcomingBills(items, today(new Date()));
+  return upcomingBills(items, await requestToday());
 });

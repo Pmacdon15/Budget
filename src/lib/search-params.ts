@@ -1,4 +1,5 @@
-import { resolveMonth } from "@/lib/month";
+import { isMonth } from "@/lib/month";
+import { requestMonth } from "@/lib/now";
 
 export type SearchParams = Promise<
   Record<string, string | string[] | undefined>
@@ -6,6 +7,7 @@ export type SearchParams = Promise<
 
 export async function monthFrom(searchParams: SearchParams) {
   const params = await searchParams;
-  const value = params.month;
-  return resolveMonth(Array.isArray(value) ? value[0] : value);
+  const value = Array.isArray(params.month) ? params.month[0] : params.month;
+  // No `?month=`: this month, read once the request is real.
+  return isMonth(value) ? value : requestMonth();
 }

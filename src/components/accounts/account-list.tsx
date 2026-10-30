@@ -25,7 +25,7 @@ import {
 } from "@/lib/accounts";
 import { balanceDebitLabel } from "@/lib/bank-balance";
 import { formatMoney } from "@/lib/money";
-import { today } from "@/lib/month";
+import { requestToday } from "@/lib/now";
 import { cn } from "@/lib/utils";
 import { AccountActions, DeleteTransferButton } from "./account-actions";
 import { AccountDialog } from "./account-dialog";
@@ -48,7 +48,7 @@ export async function AccountsHeaderActions({ month }: Props) {
       {accounts.length >= 2 ? (
         <TransferDialog
           accounts={accounts.map((a) => ({ id: a.id, name: a.name }))}
-          today={today()}
+          today={await requestToday()}
           trigger={
             <Button variant="outline">
               <ArrowRightLeft /> Record transfer

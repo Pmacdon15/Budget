@@ -58,18 +58,24 @@ describe("yearSchema / resolveYear", () => {
     }
   });
 
-  it("reads ?year=, then the year of ?month=, then today", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-10-25T18:00:00Z"));
+  it("reads ?year=, then the year of ?month=, else null", () => {
     expect(resolveYear({ year: "2024", month: "2025-03" })).toBe(2024);
     expect(resolveYear({ year: ["2023", "2024"] })).toBe(2023);
     expect(resolveYear({ year: "garbage", month: "2025-03" })).toBe(2025);
-    expect(resolveYear({ month: "nope" })).toBe(2026);
-    expect(resolveYear({})).toBe(2026);
+    expect(resolveYear({ month: "nope" })).toBeNull();
+    expect(resolveYear({})).toBeNull();
   });
 
   it("yearFrom unwraps the searchParams promise", async () => {
     expect(await yearFrom(Promise.resolve({ year: "2025" }))).toBe(2025);
+  });
+
+  it("yearFrom falls back to the current year in Regina time", async () => {
+    vi.useFakeTimers();
+    // Still Dec 31 in Regina (UTC-6).
+    vi.setSystemTime(new Date("2027-01-01T03:00:00Z"));
+    expect(await yearFrom(Promise.resolve({}))).toBe(2026);
+    vi.useRealTimers();
   });
 });
 

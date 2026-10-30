@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { currentMonth, isMonth } from "@/lib/month";
+import { isMonth } from "@/lib/month";
+import { requestMonth } from "@/lib/now";
 import type { SearchParams } from "@/lib/search-params";
 
 /** A calendar year the year view can show, e.g. `?year=2026`. */
@@ -14,7 +15,7 @@ const first = (value: string | string[] | undefined) =>
 
 /**
  * The year to show: `?year=`, else the year of `?month=` (the nav keeps the
- * selected month in the URL), else the current year.
+ * selected month in the URL), else null for the current year.
  */
 export function resolveYear(
   params: Record<string, string | string[] | undefined>,
@@ -23,10 +24,13 @@ export function resolveYear(
   if (year.success) return year.data;
   const month = first(params.month);
   if (isMonth(month)) return Number(month.slice(0, 4));
-  return Number(currentMonth().slice(0, 4));
+  return null;
 }
 
 /** Call without `await` in a page and pass the promise down. */
 export async function yearFrom(searchParams: SearchParams) {
-  return resolveYear(await searchParams);
+  return (
+    resolveYear(await searchParams) ??
+    Number((await requestMonth()).slice(0, 4))
+  );
 }
