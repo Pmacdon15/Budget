@@ -93,7 +93,7 @@ async function BalanceDetails({ month }: Props) {
   const chequingCount = accounts.filter((a) => a.type === "chequing").length;
   const net = netChequingCents(accounts);
   return (
-    <div className="flex flex-1 flex-wrap items-center justify-between gap-3">
+    <div className="flex min-w-0 flex-[1_1_16rem] flex-wrap items-center justify-between gap-3">
       <div className="text-muted-foreground text-sm">
         <p>
           {balance

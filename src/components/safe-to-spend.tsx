@@ -89,7 +89,7 @@ async function SafeToSpendCard({ month: monthPromise, className }: Props) {
             </p>
           </div>
         </div>
-        <div className="grid flex-1 gap-0.5 text-sm">
+        <div className="grid min-w-0 flex-[1_1_16rem] gap-0.5 text-sm">
           <p>{message}</p>
           <p className="text-muted-foreground text-xs">
             Take-home minus fixed bills and spending so far
