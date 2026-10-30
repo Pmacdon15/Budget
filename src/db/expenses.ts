@@ -1,4 +1,6 @@
 import "server-only";
+import { cacheLife, cacheTag } from "next/cache";
+import { userDataTag } from "@/db/cache-tags";
 import { db, type Row } from "@/db/client";
 import { type ReplacedFiles, receiptValues } from "@/db/receipt-files";
 import type { ReceiptDetails } from "@/lib/pending-expenses";
@@ -70,6 +72,9 @@ export async function selectExpensesBetween(
   from: string,
   to: string,
 ): Promise<Expense[]> {
+  "use cache";
+  cacheTag(userDataTag(userId));
+  cacheLife("minutes");
   const rows = await db()`
     select id, month, spent_on, description, category, amount_cents, receipt_id,
            unpaid, account_id,

@@ -1,6 +1,8 @@
 import "server-only";
 import type { AuthInfo, McpServer } from "@modelcontextprotocol/server";
+import { revalidateTag } from "next/cache";
 import { z } from "zod";
+import { userDataTag } from "@/db/cache-tags";
 import {
   listAccountsInputSchema,
   proposeAccountInputSchema,
@@ -106,11 +108,21 @@ function respond(result: ToolResult) {
   };
 }
 
-/** Runs a tool for the verified caller; bad input becomes a readable tool error. */
+/**
+ * Runs a tool for the verified caller; bad input becomes a readable tool error.
+ *
+ * A tool that writes also clears the caller's cached `"use cache"` reads in
+ * `src/db`, the way `runAction` does for the web UI: without it an expense an
+ * AI recorded wouldn't show up on the dashboard until the `cacheLife` window
+ * passed. `revalidateTag`, not `updateTag`, because this is a route handler.
+ * Invalidating is the default, so a new tool is stale-free until it opts out
+ * with `readOnly`.
+ */
 async function run(
   server: McpServer,
   authInfo: AuthInfo | undefined,
   tool: (caller: McpCaller) => ToolResult | Promise<ToolResult>,
+  { readOnly = false }: { readOnly?: boolean } = {},
 ) {
   const caller = callerFrom(
     authInfo,
@@ -124,7 +136,11 @@ async function run(
     });
   }
   try {
-    return respond(await tool(caller));
+    const result = respond(await tool(caller));
+    // `{ expire: 0 }`: the next read waits for fresh data instead of being
+    // served the old entry, which is what `updateTag` does for the web UI.
+    if (!readOnly) revalidateTag(userDataTag(caller.userId), { expire: 0 });
+    return result;
   } catch (error) {
     if (error instanceof z.ZodError) {
       return respond({
@@ -152,7 +168,10 @@ export function registerBudgetTools(server: McpServer) {
       inputSchema: portable(listCategoriesInputSchema),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    (args, ctx) => run(server, ctx.http?.authInfo, () => listCategories(args)),
+    (args, ctx) =>
+      run(server, ctx.http?.authInfo, () => listCategories(args), {
+        readOnly: true,
+      }),
   );
 
   server.registerTool(
@@ -165,7 +184,9 @@ export function registerBudgetTools(server: McpServer) {
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     (args, ctx) =>
-      run(server, ctx.http?.authInfo, (caller) => listExpenses(caller, args)),
+      run(server, ctx.http?.authInfo, (caller) => listExpenses(caller, args), {
+        readOnly: true,
+      }),
   );
 
   server.registerTool(
@@ -290,7 +311,9 @@ export function registerBudgetTools(server: McpServer) {
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     (args, ctx) =>
-      run(server, ctx.http?.authInfo, (caller) => readReceipt(caller, args)),
+      run(server, ctx.http?.authInfo, (caller) => readReceipt(caller, args), {
+        readOnly: true,
+      }),
   );
 
   server.registerTool(
@@ -303,7 +326,12 @@ export function registerBudgetTools(server: McpServer) {
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     (args, ctx) =>
-      run(server, ctx.http?.authInfo, (caller) => listFixedBills(caller, args)),
+      run(
+        server,
+        ctx.http?.authInfo,
+        (caller) => listFixedBills(caller, args),
+        { readOnly: true },
+      ),
   );
 
   server.registerTool(
@@ -370,8 +398,11 @@ export function registerBudgetTools(server: McpServer) {
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     (args, ctx) =>
-      run(server, ctx.http?.authInfo, (caller) =>
-        findMatchingFixedBill(caller, args),
+      run(
+        server,
+        ctx.http?.authInfo,
+        (caller) => findMatchingFixedBill(caller, args),
+        { readOnly: true },
       ),
   );
 
@@ -442,7 +473,9 @@ export function registerBudgetTools(server: McpServer) {
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     (args, ctx) =>
-      run(server, ctx.http?.authInfo, (caller) => listIncome(caller, args)),
+      run(server, ctx.http?.authInfo, (caller) => listIncome(caller, args), {
+        readOnly: true,
+      }),
   );
 
   server.registerTool(
@@ -455,7 +488,9 @@ export function registerBudgetTools(server: McpServer) {
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     (args, ctx) =>
-      run(server, ctx.http?.authInfo, (caller) => listAccounts(caller, args)),
+      run(server, ctx.http?.authInfo, (caller) => listAccounts(caller, args), {
+        readOnly: true,
+      }),
   );
 
   server.registerTool(

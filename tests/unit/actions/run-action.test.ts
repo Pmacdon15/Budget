@@ -1,8 +1,15 @@
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { runAction } from "@/actions/run-action";
 import { NotFoundError, UnauthorizedError } from "@/dal/errors";
+import { userDataTag } from "@/db/cache-tags";
+
+// `runAction` resolves the user so it can clear that user's cached reads.
+// Stubbed here so this stays a unit test: the real one calls Clerk.
+vi.mock("@/dal/auth", () => ({
+  currentUserIdOrThrow: vi.fn(async () => "user_a"),
+}));
 
 describe("runAction", () => {
   it("reports success and refreshes the whole app", async () => {
@@ -10,6 +17,8 @@ describe("runAction", () => {
     expect(await runAction(mutate)).toEqual({ ok: true });
     expect(mutate).toHaveBeenCalledOnce();
     expect(revalidatePath).toHaveBeenCalledWith("/", "layout");
+    // `revalidatePath` doesn't reach the `"use cache"` reads in `src/db`.
+    expect(updateTag).toHaveBeenCalledWith(userDataTag("user_a"));
   });
 
   it("turns validation errors into field errors", async () => {
@@ -29,6 +38,7 @@ describe("runAction", () => {
       },
     });
     expect(revalidatePath).not.toHaveBeenCalled();
+    expect(updateTag).not.toHaveBeenCalled();
   });
 
   it("passes expected DAL errors through with their message", async () => {
@@ -46,6 +56,7 @@ describe("runAction", () => {
       }),
     ).toEqual({ ok: false, error: "That item no longer exists." });
     expect(revalidatePath).not.toHaveBeenCalled();
+    expect(updateTag).not.toHaveBeenCalled();
   });
 
   it("hides unexpected errors behind a generic message and logs them", async () => {
@@ -60,6 +71,7 @@ describe("runAction", () => {
     });
     expect(log).toHaveBeenCalledWith(boom);
     expect(revalidatePath).not.toHaveBeenCalled();
+    expect(updateTag).not.toHaveBeenCalled();
   });
 });
 
