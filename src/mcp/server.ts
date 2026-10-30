@@ -173,7 +173,7 @@ export function registerBudgetTools(server: McpServer) {
     {
       title: "Add expense for review",
       description:
-        "Submits a charge you found (e.g. in an email) to the user's Pending Review list. It does not become an expense until the user approves it in Budget. Before calling, tell the user the merchant, amount and date and the category you suggest, and wait for them to confirm the category. If the answer is status 'possible_duplicate', nothing was saved: ask the user, and only resubmit with allow_duplicate: true if they say it's a separate charge. It also checks the user's fixed bills: status 'matches_fixed_bill' means nothing was saved and the charge looks like one of them; show the user the suggestion, then resubmit with fixed_bill_id (it's that bill) or is_subscription: false (a separate charge). Set is_subscription: true for a subscription with no fixed bill yet, so approving it creates one. When the email is the bill or receipt, include it as receipt: its amounts and text, plus its PDF attachment (or a JPEG), or the email itself (receipt.email.html or text) when it has no attachment. An email already saved as a receipt (same message_id or file) answers 'possible_duplicate'.",
+        "Submits a charge you found (e.g. in an email) to the user's Pending Review list. It does not become an expense until the user approves it in Budget. Before calling, tell the user the merchant, amount and date and the category you suggest, and wait for them to confirm the category. When the user has more than one account (list_accounts), also confirm which account it was paid from and pass its account_id: without it the answer is status 'needs_account', nothing is saved, and you ask the user which of the listed accounts paid. Never choose the account yourself, even when the email names a card. If the answer is status 'possible_duplicate', nothing was saved: ask the user, and only resubmit with allow_duplicate: true if they say it's a separate charge. It also checks the user's fixed bills: status 'matches_fixed_bill' means nothing was saved and the charge looks like one of them; show the user the suggestion, then resubmit with fixed_bill_id (it's that bill) or is_subscription: false (a separate charge). Set is_subscription: true for a subscription with no fixed bill yet, so approving it creates one. When the email is the bill or receipt, include it as receipt: its amounts and text, plus its PDF attachment (or a JPEG), or the email itself (receipt.email.html or text) when it has no attachment. An email already saved as a receipt (same message_id or file) answers 'possible_duplicate'.",
       inputSchema: portable(addExpenseInputSchema),
       annotations: {
         readOnlyHint: false,
@@ -191,7 +191,7 @@ export function registerBudgetTools(server: McpServer) {
     {
       title: "Set bank balance",
       description:
-        "Sets the user's bank balance (their primary chequing account, the one expenses come off) to what their bank reported in a low-balance or debit alert. It replaces the balance; it never subtracts. Expenses added after this come off it. Don't also add_expense a charge only because a bank alert mentions it. When the email names the account (institution and last four digits), use update_account_balance; for a statement, record_statement.",
+        "Sets the user's bank balance (their primary chequing account) to what their bank reported in a low-balance or debit alert. It replaces the balance; it never subtracts. Expenses paid from it added after this come off it. Don't also add_expense a charge only because a bank alert mentions it. When the email names the account (institution and last four digits), use update_account_balance; for a statement, record_statement.",
       inputSchema: portable(syncBankBalanceInputSchema),
       annotations: {
         readOnlyHint: false,
@@ -211,7 +211,7 @@ export function registerBudgetTools(server: McpServer) {
     {
       title: "Edit a saved expense",
       description:
-        "Changes a saved expense. Only use this when the user explicitly asks to change a specific expense; confirm which one first (find its id with list_expenses). Pass only the fields that change.",
+        "Changes a saved expense. Only use this when the user explicitly asks to change a specific expense; confirm which one first (find its id with list_expenses). Pass only the fields that change; account_id moves it to the account the user says it was really paid from.",
       inputSchema: portable(editExpenseInputSchema),
       annotations: {
         readOnlyHint: false,

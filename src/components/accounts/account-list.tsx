@@ -206,7 +206,7 @@ function AccountCard({
         <CardTitle className="flex flex-wrap items-center gap-2">
           <span className="truncate">{account.name}</span>
           {account.isPrimary ? (
-            <Badge variant="secondary">Expenses come off this</Badge>
+            <Badge variant="secondary">Main chequing</Badge>
           ) : null}
         </CardTitle>
         <CardDescription>{accountSubtitle(account)}</CardDescription>

@@ -83,7 +83,7 @@ describe("Accounts page", () => {
     const text = await render(AccountsPage);
     expect(text).toContain("Everyday");
     expect(text).toContain("Chequing · TD · ••9876");
-    expect(text).toContain("Expenses come off this");
+    expect(text).toContain("Main chequing");
     expect(text).toContain("Net chequing");
     expect(text).toContain("$1,200.00");
     expect(text).toContain("Owed on credit");

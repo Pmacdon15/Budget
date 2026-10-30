@@ -13,6 +13,11 @@ type ExpenseValues = {
   description: string;
   category: string;
   amountCents: number;
+  /**
+   * The account it came out of; null for the primary chequing account. On an
+   * update, leaving it out keeps the account the expense has.
+   */
+  accountId?: string | null;
 };
 
 /** What was read off a scanned receipt, stored alongside the expense. */
@@ -57,6 +62,7 @@ export const toExpense = (r: Row): Expense => ({
   ...(r.fixed_item_id === undefined
     ? {}
     : { fixedItemId: r.fixed_item_id ?? null }),
+  ...(r.account_id === undefined ? {} : { accountId: r.account_id ?? null }),
 });
 
 export async function selectExpensesBetween(
@@ -66,7 +72,7 @@ export async function selectExpensesBetween(
 ): Promise<Expense[]> {
   const rows = await db()`
     select id, month, spent_on, description, category, amount_cents, receipt_id,
-           unpaid,
+           unpaid, account_id,
            (select r.image_pathname is not null from receipts r
             where r.id = expenses.receipt_id) as receipt_has_photo,
            (select r.file_kind from receipts r
@@ -123,7 +129,7 @@ export async function selectExpenseById(
 ): Promise<Expense | null> {
   const rows = await db()`
     select id, month, spent_on, description, category, amount_cents, receipt_id,
-           unpaid, paid_on, fixed_item_id
+           unpaid, paid_on, fixed_item_id, account_id
     from expenses
     where id = ${id} and user_id = ${userId}
   `;
@@ -150,9 +156,10 @@ export async function countExpensesSharingReceipt(
 
 export async function insertExpense(userId: string, values: ExpenseValues) {
   await db()`
-    insert into expenses (user_id, month, spent_on, description, category, amount_cents)
+    insert into expenses (user_id, month, spent_on, description, category,
+                          amount_cents, account_id)
     values (${userId}, ${values.month}, ${values.spentOn}, ${values.description},
-            ${values.category}, ${values.amountCents})
+            ${values.category}, ${values.amountCents}, ${values.accountId ?? null}::uuid)
   `;
 }
 
@@ -175,11 +182,14 @@ export async function insertExpenseLines(
   const categories = lines.map((l) => l.category);
   const amounts = lines.map((l) => l.amountCents);
 
+  const accountId = base.accountId ?? null;
+
   if (!receipt) {
     await db()`
-      insert into expenses (user_id, month, spent_on, description, category, amount_cents)
+      insert into expenses (user_id, month, spent_on, description, category,
+                            amount_cents, account_id)
       select ${userId}, ${base.month}, ${base.spentOn}, ${base.description},
-             line.category, line.amount_cents
+             line.category, line.amount_cents, ${accountId}::uuid
       from unnest(${categories}::text[], ${amounts}::int[]) as line(category, amount_cents)
     `;
     return;
@@ -195,9 +205,9 @@ export async function insertExpenseLines(
       returning id
     )
     insert into expenses (user_id, month, spent_on, description, category,
-                          amount_cents, receipt_id)
+                          amount_cents, receipt_id, account_id)
     select ${userId}, ${base.month}, ${base.spentOn}, ${base.description},
-           line.category, line.amount_cents, saved.id
+           line.category, line.amount_cents, saved.id, ${accountId}::uuid
     from saved,
          unnest(${categories}::text[], ${amounts}::int[]) as line(category, amount_cents)
   `;
@@ -223,7 +233,10 @@ export async function updateExpenseRow(
     update expenses
     set month = ${values.month}, spent_on = ${values.spentOn},
         description = ${values.description}, category = ${values.category},
-        amount_cents = ${values.amountCents}
+        amount_cents = ${values.amountCents},
+        account_id = case when ${values.accountId !== undefined}::boolean
+                          then ${values.accountId ?? null}::uuid
+                          else account_id end
     where id = ${id} and user_id = ${userId}
     returning id
   `;
@@ -297,7 +310,7 @@ export async function selectExpensesWithStatus(
 ): Promise<ExpenseWithStatus[]> {
   const rows = await db()`
     select id, month, spent_on, description, category, amount_cents, receipt_id,
-           unpaid, fixed_item_id,
+           unpaid, fixed_item_id, account_id,
            (select r.image_pathname is not null from receipts r
             where r.id = expenses.receipt_id) as receipt_has_photo,
            (select r.file_kind from receipts r

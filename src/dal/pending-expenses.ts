@@ -1,8 +1,10 @@
 import "server-only";
 import { cache } from "react";
 import { currentUserIdOrThrow, requireUserId } from "@/dal/auth";
-import { NotFoundError } from "@/dal/errors";
+import { ConflictError, NotFoundError } from "@/dal/errors";
+import { chooseExpenseAccount } from "@/dal/expenses";
 import { updateFixedItemFor } from "@/dal/fixed-items";
+import { selectAccounts } from "@/db/accounts";
 import { selectFixedItemInMonth } from "@/db/fixed-items";
 import {
   approvePendingExpense,
@@ -14,6 +16,7 @@ import {
   updatePendingExpense,
 } from "@/db/pending-expenses";
 import { isCategory } from "@/lib/categories";
+import { resolveExpenseAccount } from "@/lib/expense-accounts";
 import { monthOfDate } from "@/lib/month";
 import type { ExpenseInput } from "@/lib/schemas";
 
@@ -39,15 +42,40 @@ export const getPendingExpenseCount = cache(async () => {
 
 const GONE = "That item was already handled. Refresh to see what's left.";
 
+/** The message when an item can't be approved until the user picks its account. */
+export const CHOOSE_ACCOUNT_FIRST =
+  "You have more than one account. Edit this item and choose the account it was paid from, then approve it.";
+
 export async function editPendingExpense(id: string, input: ExpenseInput) {
   const userId = await currentUserIdOrThrow();
+  // A picked account must be the user's; none picked keeps the item's.
+  const accountId = input.accountId
+    ? await chooseExpenseAccount(userId, input.accountId)
+    : undefined;
   const updated = await updatePendingExpense(userId, id, {
     spentOn: input.spentOn,
     description: input.description,
     category: input.category,
     amountCents: input.amount,
+    accountId,
   });
   if (!updated) throw new NotFoundError(GONE);
+}
+
+/**
+ * The account an item comes out of once approved. The one the user confirmed
+ * (to the AI, or by editing); with no such account, the only one they have.
+ * With several and none confirmed, it's never guessed.
+ */
+async function approvedAccount(userId: string, id: string) {
+  const item = await selectPendingExpense(userId, id);
+  if (!item) throw new NotFoundError(GONE);
+  const choice = resolveExpenseAccount(
+    await selectAccounts(userId),
+    item.accountId,
+  );
+  if (choice.kind !== "ok") throw new ConflictError(CHOOSE_ACCOUNT_FIRST);
+  return choice.accountId;
 }
 
 /**
@@ -60,8 +88,10 @@ export async function approvePending(
   options: { replace?: boolean } = {},
 ) {
   const userId = await currentUserIdOrThrow();
+  // Checked first, so a refusal never leaves a bill half-replaced.
+  const accountId = await approvedAccount(userId, id);
   if (options.replace) await replaceBillWith(userId, id);
-  if (!(await approvePendingExpense(userId, id))) {
+  if (!(await approvePendingExpense(userId, id, accountId))) {
     throw new NotFoundError(GONE);
   }
 }

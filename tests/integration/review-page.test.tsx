@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createApiKey } from "@/actions/api-keys";
 import ReviewPage from "@/app/(app)/review/page";
+import { insertAccount } from "@/db/accounts";
 import { insertPendingExpense } from "@/db/pending-expenses";
 import { insertPendingIncome } from "@/db/pending-income";
 import { signInAs } from "../helpers/auth";
@@ -47,6 +48,46 @@ describe("Review page", () => {
     expect(text).toContain("Email from receipts@shell.ca: Your receipt");
     expect(text).toContain("Approve");
     expect(text).not.toContain("Possible duplicate");
+  });
+
+  it("says which account each expense was paid from, or that one must be chosen", async () => {
+    const account = (type: "chequing" | "credit_card", name: string) =>
+      insertAccount("user_a", {
+        type,
+        name,
+        institution: null,
+        lastFour: null,
+        balanceCents: 0,
+        balanceSource: "manual",
+        creditLimitCents: null,
+        availableCreditCents: null,
+        statementBalanceCents: null,
+        paymentDueDate: null,
+        minimumPaymentCents: null,
+      });
+    await account("chequing", "Chequing");
+    const visa = await account("credit_card", "RBC Visa");
+    await item("user_a", "Shell");
+    await insertPendingExpense("user_a", {
+      spentOn: "2026-10-21",
+      description: "Esso",
+      merchant: "Esso",
+      category: "Transportation",
+      amountCents: 6_000,
+      source: null,
+      client: "Claude",
+      accountId: visa,
+    });
+    const text = await render();
+    expect(text).toContain("paid from RBC Visa");
+    // The Shell item came with no account and there are two.
+    expect(text.match(/Choose an account/g)).toHaveLength(1);
+  });
+
+  it("doesn't ask for an account with only one", async () => {
+    await item();
+    const text = await render();
+    expect(text).not.toContain("Choose an account");
   });
 
   it("shows income an AI found, as money in, with its payer and account", async () => {

@@ -24,6 +24,8 @@ describe("expenseWithReceiptSchema", () => {
       receiptTotal: null,
       receiptText: null,
       splits: null,
+      // Not chosen: fine with one account, refused with several.
+      accountId: null,
     });
   });
 

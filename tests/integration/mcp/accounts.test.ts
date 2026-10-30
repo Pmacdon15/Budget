@@ -477,11 +477,13 @@ describe("record_transfer", () => {
     const cardId = await card();
     await balancesOnOct1();
     const cheq = String((await getBankBalance())?.accountId);
+    // Two accounts, so the expense says which one paid.
     await createExpense({
       description: "Groceries",
       category: "Groceries",
       amount: "100",
       spentOn: "2026-10-20",
+      accountId: cheq,
     });
     await recordTransfer(A, {
       from_account_id: cheq,

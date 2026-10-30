@@ -6,7 +6,7 @@ import {
 } from "@/components/receipt-links";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { getPendingAccounts } from "@/dal/accounts";
+import { getAccounts, getPendingAccounts } from "@/dal/accounts";
 import { getPendingExpenses } from "@/dal/pending-expenses";
 import { getPendingIncome } from "@/dal/pending-income";
 import {
@@ -16,6 +16,7 @@ import {
   dateLabel as statementDate,
 } from "@/lib/accounts";
 import { categoryLabel } from "@/lib/categories";
+import { needsAccountChoice } from "@/lib/expense-accounts";
 import { formatMoney } from "@/lib/money";
 import type { PendingExpense } from "@/lib/pending-expenses";
 import type { PendingIncome } from "@/lib/pending-income";
@@ -38,11 +39,14 @@ const day = (date: string) => dateLabel.format(new Date(`${date}T00:00:00Z`));
  */
 export async function PendingList({ month }: { month: Promise<string> }) {
   await month;
-  const [items, accounts, income] = await Promise.all([
+  const [items, accounts, income, existing] = await Promise.all([
     getPendingExpenses(),
     getPendingAccounts(),
     getPendingIncome(),
+    getAccounts(),
   ]);
+  // With several accounts, each expense must say which one paid.
+  const askAccount = needsAccountChoice(existing);
   const count = items.length + accounts.length + income.length;
 
   if (count === 0) {
@@ -69,13 +73,20 @@ export async function PendingList({ month }: { month: Promise<string> }) {
         <PendingIncomeRow key={item.id} item={item} />
       ))}
       {items.map((item) => (
-        <PendingRow key={item.id} item={item} />
+        <PendingRow key={item.id} item={item} askAccount={askAccount} />
       ))}
     </div>
   );
 }
 
-function PendingRow({ item }: { item: PendingExpense }) {
+function PendingRow({
+  item,
+  askAccount,
+}: {
+  item: PendingExpense;
+  /** The user has several accounts, so the one it came out of must be chosen. */
+  askAccount: boolean;
+}) {
   return (
     <Card size="sm">
       <CardContent className="flex flex-wrap items-center justify-between gap-3">
@@ -87,6 +98,9 @@ function PendingRow({ item }: { item: PendingExpense }) {
               <Badge variant="outline">Possible duplicate</Badge>
             ) : null}
             {item.unpaid ? <Badge variant="outline">Not paid yet</Badge> : null}
+            {askAccount && !item.accountName ? (
+              <Badge variant="destructive">Choose an account</Badge>
+            ) : null}
             {item.hasReceipt ? (
               <Badge variant="outline">
                 Receipt attached
@@ -117,6 +131,7 @@ function PendingRow({ item }: { item: PendingExpense }) {
             {item.merchant && item.merchant !== item.description
               ? ` · ${item.merchant}`
               : ""}
+            {item.accountName ? ` · paid from ${item.accountName}` : ""}
             {item.client ? ` · from ${item.client}` : ""}
           </p>
           {item.source ? (

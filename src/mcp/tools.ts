@@ -4,6 +4,7 @@ import {
   payBillWithExpenseFor,
 } from "@/dal/expense-bills";
 import { updateFixedItemFor } from "@/dal/fixed-items";
+import { selectAccounts } from "@/db/accounts";
 import { selectBankBalance, upsertBankBalance } from "@/db/bank-balance";
 import {
   insertBillPayment,
@@ -34,6 +35,7 @@ import {
   setPendingBill,
 } from "@/db/pending-expenses";
 import { selectReceiptSourceMatch } from "@/db/receipt-files";
+import { type Account, accountTypeLabel } from "@/lib/accounts";
 import {
   type BillMatch,
   cleanKeywords,
@@ -42,6 +44,10 @@ import {
 } from "@/lib/bill-matching";
 import { isActive } from "@/lib/budget";
 import { CATEGORIES, isCategory } from "@/lib/categories";
+import {
+  expenseAccountLabel,
+  resolveExpenseAccount,
+} from "@/lib/expense-accounts";
 import { currentMonth, monthOfDate, today } from "@/lib/month";
 import {
   type AddExpenseInput,
@@ -106,6 +112,43 @@ const notFound = (what: string, lookup: string): ToolResult => ({
   isError: true,
 });
 
+/** An account as add_expense offers it to choose from. */
+const accountOption = (a: Account) => ({
+  id: a.id,
+  name: a.name,
+  type: a.type,
+  institution: a.institution,
+  last_four: a.lastFour,
+  is_primary: a.isPrimary,
+});
+
+/** "Visa (Credit card · RBC · ••1234)", "Chequing (Chequing)". */
+const accountNames = (accounts: Account[]) =>
+  accounts.map((a) => `"${expenseAccountLabel(a)}"`).join(", ");
+
+/**
+ * Asks the AI to confirm the account with the user. Nothing was saved.
+ * `unknown`: the account_id it sent isn't one of the user's.
+ */
+function needsAccount(
+  accounts: Account[],
+  unknown: boolean,
+  tool = "add_expense",
+): ToolResult {
+  return {
+    summary: `${
+      unknown
+        ? "That account_id isn't one of the user's accounts."
+        : "The user has more than one account, so Budget needs to know which one this came out of."
+    } Nothing was saved. Their accounts: ${accountNames(accounts)}. Ask the user which one this was paid from, even when the email names a card, and wait for their answer. Then call ${tool} again with that account's account_id.`,
+    data: {
+      status: unknown ? "unknown_account" : "needs_account",
+      accounts: accounts.map(accountOption),
+    },
+    ...(unknown ? { isError: true } : {}),
+  };
+}
+
 function daysAgo(date: string, days: number) {
   const d = new Date(`${date}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() - days);
@@ -140,10 +183,22 @@ export async function listExpenses(
       isError: true,
     };
   }
-  const saved = await selectExpensesWithStatus(caller.userId, from, to);
-  const pending = (await selectPendingExpenses(caller.userId)).filter(
+  const [saved, allPending, accounts] = await Promise.all([
+    selectExpensesWithStatus(caller.userId, from, to),
+    selectPendingExpenses(caller.userId),
+    selectAccounts(caller.userId),
+  ]);
+  const pending = allPending.filter(
     (p) => p.spentOn >= from && p.spentOn <= to,
   );
+  // No account on an expense means the main chequing account.
+  const primary = accounts.find((a) => a.isPrimary) ?? null;
+  const paidFrom = (accountId: string | null | undefined) => {
+    const account = accountId
+      ? accounts.find((a) => a.id === accountId)
+      : primary;
+    return { account_id: account?.id ?? null, account: account?.name ?? null };
+  };
   return {
     summary: `${saved.length} saved expense(s) and ${pending.length} waiting for review between ${from} and ${to}.`,
     data: {
@@ -159,6 +214,7 @@ export async function listExpenses(
         has_receipt: e.hasReceipt,
         ...(e.hasReceipt ? { receipt_kind: e.receiptKind ?? "details" } : {}),
         fixed_bill_id: e.fixedItemId ?? null,
+        ...paidFrom(e.accountId),
       })),
       pending_review: pending.map((p) => ({
         id: p.id,
@@ -172,6 +228,9 @@ export async function listExpenses(
         ...(p.hasReceipt ? { receipt_kind: p.receiptKind ?? "details" } : {}),
         fixed_bill_id: p.fixedItemId ?? null,
         is_subscription: p.isSubscription ?? "unknown",
+        // Null: not confirmed yet, so the user picks one before approving.
+        account_id: p.accountId ?? null,
+        account: p.accountName ?? null,
       })),
     },
   };
@@ -247,6 +306,15 @@ async function addExpenseFor(
     }
   }
 
+  // Which account paid: confirmed with the user, never guessed. Checked last,
+  // so a duplicate or fixed bill question comes first, and before the receipt
+  // is stored, so asking leaves nothing behind.
+  const accounts = await selectAccounts(caller.userId);
+  const choice = resolveExpenseAccount(accounts, input.account_id);
+  if (choice.kind !== "ok") {
+    return needsAccount(choice.accounts, choice.kind === "unknown");
+  }
+
   const receipt = prepared
     ? await storePreparedReceipt(caller.userId, prepared)
     : null;
@@ -265,7 +333,11 @@ async function addExpenseFor(
       input.is_subscription === undefined || input.is_subscription === "unknown"
         ? null
         : input.is_subscription,
+    accountId: choice.accountId,
   });
+  const paidFrom = choice.account
+    ? ` Paid from ${choice.account.name} (${accountTypeLabel(choice.account.type)}).`
+    : "";
   const notes = [
     fixedItemId
       ? "It pays a fixed bill: approving marks that month paid, so it isn't counted twice. If the amount differs, the user can choose Replace on the Review page to update the bill."
@@ -278,10 +350,12 @@ async function addExpenseFor(
     prepared ? receiptNote(prepared) : null,
   ].filter(Boolean);
   return {
-    summary: `Sent to Pending Review: ${input.merchant}, $${input.amount.toFixed(2)} on ${input.date} (${input.category}). The user approves it in Budget at ${REVIEW_URL} before it counts as an expense.${notes.length ? ` ${notes.join(" ")}` : ""}`,
+    summary: `Sent to Pending Review: ${input.merchant}, $${input.amount.toFixed(2)} on ${input.date} (${input.category}).${paidFrom} The user approves it in Budget at ${REVIEW_URL} before it counts as an expense.${notes.length ? ` ${notes.join(" ")}` : ""}`,
     data: {
       status: "pending_review",
       id,
+      account_id: choice.accountId,
+      account_name: choice.account?.name ?? null,
       review_url: REVIEW_URL,
       unpaid: input.unpaid ?? false,
       has_receipt: receipt !== null,
@@ -300,7 +374,7 @@ export async function syncBankBalance(
   await upsertBankBalance(caller.userId, balanceCents, input.source || "alert");
   const saved = await selectBankBalance(caller.userId);
   return {
-    summary: `Bank balance (${saved?.accountName ?? "Chequing"}, the account expenses come off) set to $${input.balance.toFixed(2)}. Expenses dated today or later, added from now on, come off it; anything dated earlier is already in this number. When the email names another account, use update_account_balance instead.`,
+    summary: `Bank balance (${saved?.accountName ?? "Chequing"}, the main chequing account) set to $${input.balance.toFixed(2)}. Expenses dated today or later, added from now on, come off it; anything dated earlier is already in this number. When the email names another account, use update_account_balance instead.`,
     data: {
       account_id: saved?.accountId ?? null,
       balance: dollars(saved?.balanceCents ?? balanceCents),
@@ -322,6 +396,12 @@ export async function editExpense(
       isError: true,
     };
   }
+  let account: Account | null = null;
+  if (input.account_id) {
+    const accounts = await selectAccounts(caller.userId);
+    account = accounts.find((a) => a.id === input.account_id) ?? null;
+    if (!account) return needsAccount(accounts, true, "edit_expense");
+  }
   const spentOn = input.date ?? existing.spentOn;
   const values = {
     month: monthOfDate(spentOn),
@@ -330,16 +410,19 @@ export async function editExpense(
     category: input.category ?? existing.category,
     amountCents:
       input.amount === undefined ? existing.amountCents : toCents(input.amount),
+    // Left out, it keeps the account it has.
+    accountId: account ? account.id : undefined,
   };
   await updateExpenseRow(caller.userId, input.id, values);
   return {
-    summary: `Updated: ${values.description}, $${(values.amountCents / 100).toFixed(2)} on ${values.spentOn} (${values.category}).`,
+    summary: `Updated: ${values.description}, $${(values.amountCents / 100).toFixed(2)} on ${values.spentOn} (${values.category})${account ? `, paid from ${account.name}` : ""}.`,
     data: {
       id: input.id,
       date: values.spentOn,
       description: values.description,
       category: values.category,
       amount: dollars(values.amountCents),
+      ...(account ? { account_id: account.id, account: account.name } : {}),
     },
   };
 }

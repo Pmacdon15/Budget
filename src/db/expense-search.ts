@@ -29,7 +29,7 @@ export async function selectMatchingExpenses(
   const pattern = filters.text ? likePattern(filters.text) : null;
   const rows = await db()`
     select e.id, e.month, e.spent_on, e.description, e.category,
-           e.amount_cents, e.receipt_id, e.unpaid, e.fixed_item_id,
+           e.amount_cents, e.receipt_id, e.unpaid, e.fixed_item_id, e.account_id,
            (r.image_pathname is not null) as receipt_has_photo,
            r.file_kind as receipt_kind
     from expenses e

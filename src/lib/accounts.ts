@@ -43,18 +43,18 @@ export type Account = {
   name: string;
   institution: string | null;
   lastFour: string | null;
-  /** The chequing account expenses and paid bills come off. */
+  /** The chequing account expenses with no account given, and paid bills, come off. */
   isPrimary: boolean;
   /**
-   * The balance now: what was entered (or reported), less the expenses that
-   * came off it since (primary account only), adjusted by transfers since,
-   * plus take-home deposited into it since.
+   * The balance now: what was entered (or reported), less the expenses paid
+   * from it since (for debt accounts, plus: they add to what's owed),
+   * adjusted by transfers since, plus take-home deposited into it since.
    * For debt accounts, what's owed.
    */
   balanceCents: number;
   /** The balance as it was last entered or reported. */
   enteredCents: number;
-  /** Expenses and paid bills that came off it since (primary account only). */
+  /** Expenses paid from it since (and, for the primary account, paid bills). */
   spentSinceCents: number;
   /** What transfers since then changed it by, in the account's own sign. */
   transfersSinceCents: number;
@@ -341,7 +341,7 @@ export const accountSchema = z.object({
   statementBalance: optionalMoney(true),
   paymentDueDate: optionalDate,
   minimumPayment: optionalMoney(false),
-  /** A checkbox: "on" makes this the chequing account expenses come off. */
+  /** A checkbox: "on" makes this the main chequing account (paid bills, and expenses with no account, come off it). */
   isPrimary: z
     .string()
     .optional()

@@ -143,6 +143,7 @@ describe("expenseSchema", () => {
       category: "Groceries",
       amount: 12_345,
       spentOn: "2026-10-05",
+      accountId: null,
     });
   });
 

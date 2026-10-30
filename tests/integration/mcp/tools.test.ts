@@ -243,6 +243,9 @@ describe("list_expenses", () => {
         unpaid: false,
         has_receipt: false,
         fixed_bill_id: null,
+        // No accounts yet: nothing to say it came out of.
+        account_id: null,
+        account: null,
       },
     ]);
     expect(result.data.pending_review).toEqual([
