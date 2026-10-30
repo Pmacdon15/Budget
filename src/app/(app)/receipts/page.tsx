@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { PageHeader } from "@/components/page-header";
+import { ReceiptExportDialog } from "@/components/receipt-export/receipt-export-dialog";
 import {
   ReceiptLibraryCount,
   ReceiptLibraryRows,
@@ -42,7 +43,9 @@ export default function ReceiptsPage({
       <PageHeader
         title="Receipts"
         description="Every scanned receipt in one place, so you can find one for a return or warranty without remembering the month."
-      />
+      >
+        <ReceiptExportDialog />
+      </PageHeader>
 
       <Card>
         <CardHeader className="gap-3">

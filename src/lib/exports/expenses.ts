@@ -58,7 +58,9 @@ export function categoryLabel(filters: ExpenseExportInput) {
 }
 
 /** Spending per category, largest first, only for categories that have any. */
-export function totalsByCategory(rows: ExpenseExportRow[]) {
+export function totalsByCategory(
+  rows: readonly { category: string; amountCents: number }[],
+) {
   const totals = new Map<string, { count: number; cents: number }>();
   for (const row of rows) {
     const entry = totals.get(row.category) ?? { count: 0, cents: 0 };
@@ -226,10 +228,10 @@ export function buildSpreadsheet(
 
 /* ---------- PDF ---------- */
 
-const PAGE = { width: 612, height: 792 }; // US Letter, points
-const MARGIN = 48;
+export const PAGE = { width: 612, height: 792 }; // US Letter, points
+export const MARGIN = 48;
 const INK = rgb(0.1, 0.1, 0.12);
-const MUTED = rgb(0.42, 0.45, 0.5);
+export const MUTED = rgb(0.42, 0.45, 0.5);
 const RULE = rgb(0.82, 0.84, 0.86);
 
 /**
@@ -248,9 +250,10 @@ export function pdfText(value: string) {
     .replace(/[^\x20-\x7e\xa0-\xff]/g, "");
 }
 
-type Column = { label: string; width: number; align?: "right" };
+export type Column = { label: string; width: number; align?: "right" };
 
-class Writer {
+/** Lays out text, rules and paginated tables on US Letter pages. */
+export class Writer {
   page!: PDFPage;
   y = 0;
 
