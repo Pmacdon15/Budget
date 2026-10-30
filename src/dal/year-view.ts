@@ -4,7 +4,7 @@ import { requireUserId } from "@/dal/auth";
 import { selectExpensesBetween } from "@/db/expenses";
 import { selectFixedItems } from "@/db/fixed-items";
 import { selectIncomeBetween } from "@/db/income";
-import { currentMonth } from "@/lib/month";
+import { requestMonth } from "@/lib/now";
 import { buildYearReport } from "@/lib/year-view";
 
 /**
@@ -13,8 +13,8 @@ import { buildYearReport } from "@/lib/year-view";
  * several small `<Suspense>` holes; `cache` makes them share one set of
  * queries per request.
  */
-export function getYearReport(year: number, through = currentMonth()) {
-  return loadYearReport(year, through);
+export async function getYearReport(year: number, through?: string) {
+  return loadYearReport(year, through ?? (await requestMonth()));
 }
 
 const loadYearReport = cache(async (year: number, through: string) => {

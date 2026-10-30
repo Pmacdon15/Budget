@@ -23,7 +23,8 @@ import { YearChange } from "@/components/year-view/year-change";
 import { getYearReport } from "@/dal/year-view";
 import { categoryColor, categoryLabel } from "@/lib/categories";
 import { formatMoney, formatPercent } from "@/lib/money";
-import { currentMonth, monthLabel } from "@/lib/month";
+import { monthLabel } from "@/lib/month";
+import { requestMonth } from "@/lib/now";
 import { cn } from "@/lib/utils";
 import { hasData, periodLabel, shareOf } from "@/lib/year-view";
 
@@ -46,7 +47,7 @@ const percent = (value: number | null) =>
 /** Previous / next year links. Next is hidden for the current year. */
 export async function YearSwitcher({ year: yearPromise }: YearProps) {
   const year = await yearPromise;
-  const thisYear = Number(currentMonth().slice(0, 4));
+  const thisYear = Number((await requestMonth()).slice(0, 4));
   const link = cn(buttonVariants({ variant: "outline" }), "print:hidden");
   return (
     <>

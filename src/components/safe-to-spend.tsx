@@ -4,7 +4,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { getMonthOverview } from "@/dal/overview";
 import { getRecurringIncomeForMonth } from "@/dal/recurring-income";
 import { formatMoney } from "@/lib/money";
-import { lastDayOf, today } from "@/lib/month";
+import { lastDayOf } from "@/lib/month";
+import { requestToday } from "@/lib/now";
 import { daysLeftInMonth, safeToSpend } from "@/lib/safe-to-spend";
 import { cn } from "@/lib/utils";
 
@@ -27,12 +28,13 @@ const dayCount = (n: number) => `${n} ${n === 1 ? "day" : "days"}`;
 
 async function SafeToSpendCard({ month: monthPromise, className }: Props) {
   const month = await monthPromise;
-  const [{ current, leftover }, recurring] = await Promise.all([
+  const [{ current, leftover }, recurring, today] = await Promise.all([
     getMonthOverview(month),
     getRecurringIncomeForMonth(month),
+    requestToday(),
   ]);
 
-  const daysLeft = daysLeftInMonth(month, today());
+  const daysLeft = daysLeftInMonth(month, today);
   if (daysLeft === 0) return null;
 
   // Held to net chequing like leftover spend: nothing is safe to spend while

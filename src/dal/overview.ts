@@ -9,6 +9,7 @@ import { netChequingCents } from "@/lib/accounts";
 import { categoryTotals, isActive, sum, totalsFor } from "@/lib/budget";
 import { leftoverAppliesTo, leftoverSpend } from "@/lib/leftover";
 import { addMonths, currentMonth, monthRange } from "@/lib/month";
+import { requestMonth } from "@/lib/now";
 
 /**
  * Everything the dashboard and report need for one month, plus a 12-month history.
@@ -22,7 +23,12 @@ export function getMonthOverview(month: string, historyMonths = 12) {
 const loadMonthOverview = cache(
   async (month: string, historyMonths: number) => {
     const userId = await requireUserId();
-    return buildMonthOverview(userId, month, historyMonths);
+    return buildMonthOverview(
+      userId,
+      month,
+      historyMonths,
+      await requestMonth(),
+    );
   },
 );
 
@@ -40,6 +46,7 @@ export async function buildMonthOverview(
   userId: string,
   month: string,
   historyMonths = 12,
+  thisMonth = currentMonth(),
 ) {
   const months = monthRange(month, historyMonths);
   const from = months[0];
@@ -55,9 +62,7 @@ export async function buildMonthOverview(
   const budget = history[history.length - 1] ?? totalsFor(month, [], [], []);
   const leftover = leftoverSpend(
     budget.netCents,
-    leftoverAppliesTo(month, currentMonth())
-      ? netChequingCents(accounts)
-      : null,
+    leftoverAppliesTo(month, thisMonth) ? netChequingCents(accounts) : null,
   );
   const current = { ...budget, netCents: leftover.leftoverCents };
   history[history.length - 1] = current;
