@@ -1,6 +1,8 @@
 import "server-only";
+import { z } from "zod";
 import { currentUserIdOrThrow, requireUserId } from "@/dal/auth";
 import { NotFoundError } from "@/dal/errors";
+import { selectAccounts } from "@/db/accounts";
 import {
   deleteExpenseRow,
   type ExpenseLine,
@@ -10,6 +12,11 @@ import {
   selectReceiptImage,
   updateExpenseRow,
 } from "@/db/expenses";
+import {
+  ACCOUNT_REQUIRED_MESSAGE,
+  resolveExpenseAccount,
+  UNKNOWN_ACCOUNT_MESSAGE,
+} from "@/lib/expense-accounts";
 import { monthOfDate } from "@/lib/month";
 import { isOwnReceiptImagePathname } from "@/lib/receipt-image";
 import { deleteReceiptImage } from "@/lib/receipt-store";
@@ -48,6 +55,27 @@ const values = (input: ExpenseInput) => ({
   amountCents: input.amount,
 });
 
+/** A problem with the account field, shown next to the account picker. */
+const accountError = (message: string) =>
+  new z.ZodError([
+    { code: "custom", message, path: ["accountId"], input: undefined },
+  ]);
+
+/**
+ * The account a new expense comes out of. Never guessed: with more than one
+ * account the user must have picked one, and it must be theirs. With one
+ * account it's that one; with none, the old bank balance behaviour (null).
+ */
+export async function chooseExpenseAccount(
+  userId: string,
+  requested: string | null | undefined,
+): Promise<string | null> {
+  const choice = resolveExpenseAccount(await selectAccounts(userId), requested);
+  if (choice.kind === "choose") throw accountError(ACCOUNT_REQUIRED_MESSAGE);
+  if (choice.kind === "unknown") throw accountError(UNKNOWN_ACCOUNT_MESSAGE);
+  return choice.accountId;
+}
+
 /**
  * Saves a new expense. With `splits`, one expense is saved per category part
  * (same description and date); with a scanned photo, the receipt is saved once
@@ -60,7 +88,9 @@ export async function createExpense(
     },
 ) {
   const userId = await currentUserIdOrThrow();
-  const { category, amountCents, ...base } = values(input);
+  const accountId = await chooseExpenseAccount(userId, input.accountId);
+  const { category, amountCents, ...rest } = values(input);
+  const base = { ...rest, accountId };
   const lines = input.splits?.length
     ? input.splits
     : [{ category, amountCents }];
@@ -88,9 +118,19 @@ export async function createExpense(
   });
 }
 
+/**
+ * Saves changes to an expense. A picked account must be one of the user's;
+ * with none picked (one account, so the form didn't ask) it keeps its account.
+ */
 export async function updateExpense(id: string, input: ExpenseInput) {
   const userId = await currentUserIdOrThrow();
-  const updated = await updateExpenseRow(userId, id, values(input));
+  const accountId = input.accountId
+    ? await chooseExpenseAccount(userId, input.accountId)
+    : undefined;
+  const updated = await updateExpenseRow(userId, id, {
+    ...values(input),
+    accountId,
+  });
   if (!updated) throw new NotFoundError();
 }
 

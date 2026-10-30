@@ -24,6 +24,8 @@ describe("db/expenses", () => {
       receiptId: null,
       receiptHasPhoto: false,
       unpaid: false,
+      // No account: the main chequing account.
+      accountId: null,
     });
   });
 

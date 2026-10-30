@@ -216,7 +216,11 @@ describe("merchant memory in the expense form", () => {
         expect.objectContaining({ category: "Dining" }),
       ),
     );
-    expect(fetch).not.toHaveBeenCalled();
+    // Only the accounts for "Paid from" load; the memory is left alone.
+    expect(fetch).not.toHaveBeenCalledWith(
+      "/api/merchant-categories",
+      expect.anything(),
+    );
   });
 });
 

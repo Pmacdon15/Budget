@@ -44,6 +44,14 @@ export type PendingExpense = {
   fixedItemIsEstimate?: boolean;
   /** A subscription: with no bill, approving makes it a new fixed bill. Null: unknown. */
   isSubscription?: boolean | null;
+  /**
+   * The account it was paid from, as the user confirmed to the AI (or picked
+   * when editing). Null: not given yet, so with several accounts the user
+   * picks one before approving.
+   */
+  accountId?: string | null;
+  /** That account's name, when it still exists. */
+  accountName?: string | null;
 };
 
 /** What an AI read off an emailed receipt, kept with the expense like a scan. */
@@ -295,6 +303,12 @@ export const addExpenseInputSchema = z.object({
     .describe(
       "The fixed bill this charge pays, from find_matching_fixed_bill or list_fixed_bills, once the user agreed. Approving marks that month paid instead of adding separate spending.",
     ),
+  account_id: z
+    .uuid()
+    .optional()
+    .describe(
+      "The account the charge was paid from (chequing, credit card or line of credit), from list_accounts, after the user confirmed it. Required when the user has more than one account: without it nothing is saved and the answer is status 'needs_account'. Never pick it yourself, even when the email names a card: ask the user, e.g. 'Paid from Visa ••1234?'.",
+    ),
 });
 
 export type AddExpenseInput = z.output<typeof addExpenseInputSchema>;
@@ -323,6 +337,12 @@ export const editExpenseInputSchema = z.object({
   date: isoDate.optional().describe("New date, as YYYY-MM-DD."),
   description: label("Description").optional(),
   category: z.enum(CATEGORY_NAMES).optional(),
+  account_id: z
+    .uuid()
+    .optional()
+    .describe(
+      "Move it to another account it was paid from, from list_accounts. Only when the user says it came out of a different account.",
+    ),
 });
 
 export const deleteExpenseInputSchema = z.object({

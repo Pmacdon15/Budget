@@ -133,7 +133,9 @@ export const accountData = (a: Account) => ({
   balance_means: isDebtType(a.type) ? "owed" : "in the account",
   balance_as_of: a.balanceAsOf,
   balance_source: a.balanceSource,
-  expenses_come_off_this: a.isPrimary,
+  // The main chequing account: paid fixed bills come off it. Expenses come
+  // off the account the user confirmed (add_expense account_id).
+  is_primary: a.isPrimary,
   counts_toward_leftover_spend: a.type === "chequing",
   credit_limit: dollarsOrNull(a.creditLimitCents),
   available_credit: dollarsOrNull(a.availableCreditCents),

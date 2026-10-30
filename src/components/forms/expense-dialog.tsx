@@ -9,6 +9,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { type Category, isCategory } from "@/lib/categories";
+import {
+  type ExpenseAccountOption,
+  needsAccountChoice,
+  requireAccount,
+} from "@/lib/expense-accounts";
 import { rememberedCategory } from "@/lib/merchant-memory";
 import { centsToInput } from "@/lib/money";
 import { currentMonth, monthLabel, monthOfDate, today } from "@/lib/month";
@@ -19,7 +24,9 @@ import {
   useAddExpenseWarningDuplicates,
 } from "@/mutations/duplicate-expenses";
 import { useSaveExpense } from "@/mutations/expenses";
+import { useExpenseAccounts } from "@/queries/expense-accounts";
 import { useMerchantMemory } from "@/queries/merchant-memory";
+import { ExpenseAccountField } from "./expense-account-field";
 import { CategorySelect, Field, MoneyInput } from "./fields";
 import { FieldError, FormDialog } from "./form-dialog";
 import { MerchantCategoryHint } from "./merchant-category-hint";
@@ -54,6 +61,11 @@ export function ExpenseDialog({
   const duplicate = mutation.error instanceof DuplicateExpenseError;
   // A new expense can also be scanned from inside the form.
   const [scan, setScan] = useState(scanProp);
+  // With more than one account, the user confirms which one paid.
+  const { data: accounts = [] } = useExpenseAccounts();
+  const schema = needsAccountChoice(accounts)
+    ? requireAccount(expenseWithReceiptSchema)
+    : expenseWithReceiptSchema;
 
   const description = editing
     ? "One-off spending like groceries, gas or a night out."
@@ -84,7 +96,7 @@ export function ExpenseDialog({
       successMessage={
         editing ? "Expense updated" : scan ? "Receipt saved" : "Expense added"
       }
-      schema={expenseWithReceiptSchema}
+      schema={schema}
       mutation={mutation}
     >
       {editing || scan ? null : <ReceiptPicker onScanned={setScan} />}
@@ -94,6 +106,7 @@ export function ExpenseDialog({
         month={month}
         expense={expense}
         scan={scan}
+        accounts={accounts}
       />
     </FormDialog>
   );
@@ -103,10 +116,12 @@ function ExpenseFields({
   month,
   expense,
   scan,
+  accounts,
 }: {
   month: string;
   expense?: Expense;
   scan?: ScannedReceipt;
+  accounts: ExpenseAccountOption[];
 }) {
   const editing = Boolean(expense);
   const read = scan?.fields;
@@ -267,6 +282,19 @@ function ExpenseFields({
           <FieldError name="spentOn" />
         </Field>
       </div>
+      <ExpenseAccountField
+        id="expense-account"
+        accounts={accounts}
+        // An expense with no account came off the primary chequing one.
+        // Not known (the list didn't read it): the user picks, never a guess.
+        defaultValue={
+          expense?.accountId === undefined
+            ? null
+            : (expense.accountId ??
+              accounts.find((a) => a.isPrimary)?.id ??
+              null)
+        }
+      />
       {splitting ? (
         <div className="grid gap-1.5">
           <div className="flex items-center justify-between">

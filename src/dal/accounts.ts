@@ -22,6 +22,10 @@ import {
   isDebtType,
   type TransferInput,
 } from "@/lib/accounts";
+import {
+  type ExpenseAccountOption,
+  toExpenseAccountOption,
+} from "@/lib/expense-accounts";
 import { deleteStatementPdf } from "@/lib/statement-store";
 
 /*
@@ -37,6 +41,17 @@ export const getAccounts = cache(async () => {
   const userId = await requireUserId();
   return selectAccounts(userId);
 });
+
+/**
+ * The accounts an expense can come out of, for the expense form's "Paid from"
+ * picker. Throws `UnauthorizedError` when signed out.
+ */
+export async function getExpenseAccountOptions(): Promise<
+  ExpenseAccountOption[]
+> {
+  const userId = await currentUserIdOrThrow();
+  return (await selectAccounts(userId)).map(toExpenseAccountOption);
+}
 
 export const getStatements = cache(async () => {
   const userId = await requireUserId();

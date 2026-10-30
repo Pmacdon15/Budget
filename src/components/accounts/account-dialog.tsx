@@ -210,7 +210,7 @@ export function AccountDialog({
               defaultChecked={account?.isPrimary ?? false}
               disabled={account?.isPrimary}
             />
-            Expenses come off this account
+            Main chequing account (fixed bills you mark paid come off it)
           </label>
           {account?.isPrimary ? (
             <input type="hidden" name="isPrimary" value="on" />

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CATEGORY_NAMES } from "@/lib/categories";
+import { accountIdField } from "@/lib/expense-accounts";
 import { formatMoney, parseMoney } from "@/lib/money";
 import { isMonth } from "@/lib/month";
 
@@ -96,6 +97,11 @@ export const expenseSchema = z.object({
   category,
   amount: money,
   spentOn: date,
+  /**
+   * The account it came out of. Empty is fine with one account (or none);
+   * with several the form asks, and the DAL refuses to guess.
+   */
+  accountId: accountIdField,
 });
 
 /*

@@ -49,6 +49,11 @@ export type Expense = {
   unpaid?: boolean;
   /** The fixed bill this expense paid. It counts as that bill, not as extra spending. */
   fixedItemId?: string | null;
+  /**
+   * The account it came out of. Null: the primary chequing account (every
+   * expense saved before accounts). Absent when the query didn't read it.
+   */
+  accountId?: string | null;
 };
 
 /** One expense line in a download, with what was read off its receipt. */

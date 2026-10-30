@@ -62,8 +62,12 @@ function toAccount(r: Row): Account {
     institution: r.institution ?? null,
     lastFour: r.last_four ?? null,
     isPrimary: Boolean(r.is_primary),
+    // Spending takes money out of chequing but adds to what's owed on credit.
     balanceCents:
-      enteredCents - spentSinceCents + transfersSinceCents + depositsSinceCents,
+      enteredCents +
+      (isDebtType(type) ? spentSinceCents : -spentSinceCents) +
+      transfersSinceCents +
+      depositsSinceCents,
     enteredCents,
     spentSinceCents,
     transfersSinceCents,
@@ -85,9 +89,12 @@ function toAccount(r: Row): Account {
  *
  * The balance is worked out on read, like the old bank balance: what was
  * entered or reported, then
- * - for the primary chequing account, less expenses and paid bills that came
- *   after it (added after `balance_as_of` and dated on or after its day, in
- *   the app's time zone; an unpaid expense waits until it's paid), and
+ * - for every account, the expenses paid from it that came after it (added
+ *   after `balance_as_of` and dated on or after its day, in the app's time
+ *   zone; an unpaid expense waits until it's paid): less for chequing, more
+ *   owed for a credit card or line of credit. An expense with no account_id
+ *   (every one saved before accounts) was paid from the primary chequing
+ *   account, which also loses paid bills by the same rule, and
  * - for every account, plus or minus transfers that came after it by the same
  *   rule. Transfers are never expenses, so they're never counted as spending.
  * - for every account, plus take-home entries deposited into it (income with
@@ -108,16 +115,19 @@ export async function selectAccounts(
            to_char(a.statement_closing_date, 'YYYY-MM-DD') as statement_closing_date,
            to_char(a.payment_due_date, 'YYYY-MM-DD') as payment_due_date,
            a.minimum_payment_cents, a.created_at,
-           case when a.is_primary then
+           coalesce((
+             select sum(e.amount_cents) from expenses e
+             where e.user_id = a.user_id
+               -- Paid from this account, or (no account given) from the
+               -- primary chequing account, as every expense was before accounts.
+               and (e.account_id = a.id or (e.account_id is null and a.is_primary))
+               and not e.unpaid
+               and coalesce(e.paid_at, e.created_at) > a.balance_as_of
+               and coalesce(e.paid_on, e.spent_on)
+                   >= (a.balance_as_of at time zone ${TIME_ZONE}::text)::date
+           ), 0)
+           + case when a.is_primary then
              coalesce((
-               select sum(e.amount_cents) from expenses e
-               where e.user_id = a.user_id
-                 and not e.unpaid
-                 and coalesce(e.paid_at, e.created_at) > a.balance_as_of
-                 and coalesce(e.paid_on, e.spent_on)
-                     >= (a.balance_as_of at time zone ${TIME_ZONE}::text)::date
-             ), 0)
-             + coalesce((
                select sum(p.amount_cents) from fixed_item_payments p
                where p.user_id = a.user_id
                  and p.expense_id is null
