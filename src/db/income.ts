@@ -1,4 +1,6 @@
 import "server-only";
+import { cacheLife, cacheTag } from "next/cache";
+import { userDataTag } from "@/db/cache-tags";
 import { db, type Row } from "@/db/client";
 import { receiptKindOf } from "@/lib/receipt-files";
 import type { IncomeEntry } from "@/lib/types";
@@ -39,6 +41,9 @@ export async function selectIncomeBetween(
   from: string,
   to: string,
 ): Promise<IncomeEntry[]> {
+  "use cache";
+  cacheTag(userDataTag(userId));
+  cacheLife("minutes");
   const rows = await db()`
     select i.id, i.month, i.label, i.amount_cents, i.received_on, i.payer,
            r.id as receipt_id, r.file_kind, r.image_pathname

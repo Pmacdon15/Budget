@@ -34,7 +34,17 @@ vi.mock("next/navigation", async () => {
   };
 });
 
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+// `cacheTag` and `cacheLife` only work inside a `"use cache"` scope, which
+// Next sets up and vitest doesn't; the `"use cache"` directives themselves are
+// inert string literals here, so the db reads run their real SQL. These spies
+// are what tests/integration/db/cache-tags.test.ts asserts on.
+vi.mock("next/cache", () => ({
+  revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
+  updateTag: vi.fn(),
+  cacheTag: vi.fn(),
+  cacheLife: vi.fn(),
+}));
 vi.mock("next/link", async () => import("../stubs/next-link"));
 
 beforeAll(async () => {

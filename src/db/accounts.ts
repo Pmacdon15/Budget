@@ -1,4 +1,6 @@
 import "server-only";
+import { cacheLife, cacheTag } from "next/cache";
+import { userDataTag } from "@/db/cache-tags";
 import { db, type Row } from "@/db/client";
 import {
   type Account,
@@ -107,6 +109,9 @@ export async function selectAccounts(
   userId: string,
   id: string | null = null,
 ): Promise<Account[]> {
+  "use cache";
+  cacheTag(userDataTag(userId));
+  cacheLife("minutes");
   const rows = await db()`
     select a.id, a.type, a.name, a.institution, a.last_four, a.is_primary,
            a.balance_cents, a.balance_as_of, a.balance_source,

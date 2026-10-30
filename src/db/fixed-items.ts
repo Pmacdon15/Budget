@@ -1,4 +1,6 @@
 import "server-only";
+import { cacheLife, cacheTag } from "next/cache";
+import { userDataTag } from "@/db/cache-tags";
 import { db, type Row } from "@/db/client";
 import type { FixedItem } from "@/lib/types";
 
@@ -35,6 +37,9 @@ const toFixedItem = (r: Row): FixedItem => ({
 });
 
 export async function selectFixedItems(userId: string): Promise<FixedItem[]> {
+  "use cache";
+  cacheTag(userDataTag(userId));
+  cacheLife("minutes");
   const rows = await db()`
     select id, name, category, amount_cents, due_day, start_month, end_month,
            merchant, match_keywords, is_estimate, series_id
