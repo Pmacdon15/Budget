@@ -30,10 +30,12 @@ export async function selectMatchingExpenses(
   const rows = await db()`
     select e.id, e.month, e.spent_on, e.description, e.category,
            e.amount_cents, e.receipt_id, e.unpaid, e.fixed_item_id, e.account_id,
-           (r.image_pathname is not null) as receipt_has_photo,
-           r.file_kind as receipt_kind
+           (select r.image_pathname is not null from receipts r
+            where r.id = e.receipt_id) as receipt_has_photo,
+           (select r.file_kind from receipts r
+            where r.id = e.receipt_id) as receipt_kind
     from expenses e
-    left join receipts r on r.id = e.receipt_id and r.user_id = e.user_id
+    left join receipts r on r.id = e.receipt_id
     where e.user_id = ${userId}
       and (${filters.month}::text is null or e.month = ${filters.month})
       and (${pattern}::text is null

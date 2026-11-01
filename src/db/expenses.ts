@@ -296,7 +296,14 @@ export async function selectReceiptImage(
 ): Promise<string | null> {
   const rows = await db()`
     select image_pathname from receipts
-    where id = ${receiptId} and user_id = ${userId}
+    where id = ${receiptId}
+      and (
+        user_id = ${userId}
+        or exists (
+          select 1 from expenses e
+          where e.receipt_id = receipts.id and e.user_id = ${userId}
+        )
+      )
   `;
   return rows[0]?.image_pathname ?? null;
 }

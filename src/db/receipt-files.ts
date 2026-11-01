@@ -350,7 +350,22 @@ export async function selectReceiptFile(
     select image_pathname, file_pathname, file_kind, file_name, email_subject,
            merchant
     from receipts
-    where id = ${receiptId} and user_id = ${userId}
+    where id = ${receiptId}
+      and (
+        user_id = ${userId}
+        or exists (
+          select 1 from expenses e
+          where e.receipt_id = receipts.id and e.user_id = ${userId}
+        )
+        or exists (
+          select 1 from fixed_item_payments p
+          where p.receipt_id = receipts.id and p.user_id = ${userId}
+        )
+        or exists (
+          select 1 from income i
+          where i.receipt_id = receipts.id and i.user_id = ${userId}
+        )
+      )
   `;
   return toStoredFile(rows[0]);
 }
