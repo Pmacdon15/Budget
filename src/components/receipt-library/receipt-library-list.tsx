@@ -1,6 +1,7 @@
 import {
   CalendarDays,
   Download,
+  File,
   FileText,
   ImageOff,
   Mail,
@@ -18,6 +19,7 @@ import { RECEIPT_LIBRARY_LIMIT } from "@/lib/schemas/receipt-library";
 
 /** The `?q=` search text, once the URL is known. */
 type SearchPromise = Promise<string>;
+type MonthPromise = Promise<string>;
 
 /*
  * The receipt library's holes. Each one waits for the URL first and only then
@@ -27,12 +29,14 @@ type SearchPromise = Promise<string>;
 
 /** "12 receipts" / "3 matches for “costco”", under the card title. */
 export async function ReceiptLibraryCount({
+  month: monthPromise,
   search: searchPromise,
 }: {
+  month: MonthPromise;
   search: SearchPromise;
 }) {
-  const search = await searchPromise;
-  const { receipts, truncated } = await getReceiptLibrary(search);
+  const [month, search] = await Promise.all([monthPromise, searchPromise]);
+  const { receipts, truncated } = await getReceiptLibrary(search, month);
   const count = receipts.length;
 
   if (search) {
@@ -54,12 +58,14 @@ export async function ReceiptLibraryCount({
 
 /** The table rows: one per receipt, even when it was split across categories. */
 export async function ReceiptLibraryRows({
+  month: monthPromise,
   search: searchPromise,
 }: {
+  month: MonthPromise;
   search: SearchPromise;
 }) {
-  const search = await searchPromise;
-  const { receipts } = await getReceiptLibrary(search);
+  const [month, search] = await Promise.all([monthPromise, searchPromise]);
+  const { receipts } = await getReceiptLibrary(search, month);
 
   if (receipts.length === 0) {
     return (
@@ -74,7 +80,10 @@ export async function ReceiptLibraryRows({
             ) : (
               <>
                 Scan a receipt on the{" "}
-                <Link href="/expenses" className="underline underline-offset-4">
+                <Link
+                  href={`/expenses?month=${month}`}
+                  className="underline underline-offset-4"
+                >
                   Spending
                 </Link>{" "}
                 page and it will be kept here.
@@ -158,15 +167,25 @@ export async function ReceiptLibraryRows({
                       <Mail className="size-4" />
                     )}
                   </a>
+                ) : receipt.kind === "file" ? (
+                  <a
+                    href={`${receiptFileHref(receipt.id, receipt.kind)}?download=1`}
+                    download
+                    className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label={`Download ${receiptKindLabel(receipt.kind)} for ${title}`}
+                    title="Download receipt file"
+                  >
+                    <File className="size-4" />
+                  </a>
                 ) : (
                   <span
                     className="p-1.5 text-muted-foreground/60"
-                    title="No photo saved"
+                    title="No photo or document saved"
                   >
                     <ImageOff className="size-4" />
                   </span>
                 )}
-                {receipt.kind !== "details" ? (
+                {receipt.kind !== "details" && receipt.kind !== "file" ? (
                   <a
                     href={`${receiptFileHref(receipt.id, receipt.kind)}?download=1`}
                     download

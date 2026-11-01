@@ -1,3 +1,4 @@
+import { FileArchive } from "lucide-react";
 import { Suspense } from "react";
 import { PageHeader } from "@/components/page-header";
 import { ReceiptExportDialog } from "@/components/receipt-export/receipt-export-dialog";
@@ -7,6 +8,7 @@ import {
 } from "@/components/receipt-library/receipt-library-list";
 import { ReceiptSearchForm } from "@/components/receipt-library/receipt-search-form";
 import { ListSkeleton, TextSkeleton } from "@/components/skeletons";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -22,29 +24,49 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { monthLabel } from "@/lib/month";
 import { receiptSearchFrom } from "@/lib/schemas/receipt-library";
-import type { SearchParams } from "@/lib/search-params";
+import { monthFrom, type SearchParams } from "@/lib/search-params";
 
 export const metadata = { title: "Receipts" };
 
 /*
  * Not async: the heading, search box and table frame are in the static shell.
- * The search text, the count and the rows each wait in their own hole.
+ * The month name, search text, count and rows each wait in their own hole.
  */
 export default function ReceiptsPage({
   searchParams,
 }: {
   searchParams: SearchParams;
 }) {
+  const month = monthFrom(searchParams);
   const search = receiptSearchFrom(searchParams);
 
   return (
     <>
       <PageHeader
         title="Receipts"
-        description="Every scanned receipt in one place, so you can find one for a return or warranty without remembering the month."
+        description={
+          <>
+            Receipts and spending documents for{" "}
+            <Suspense fallback={<TextSkeleton className="w-24" />}>
+              {month.then((m) => monthLabel(m))}
+            </Suspense>
+            .
+          </>
+        }
       >
-        <ReceiptExportDialog />
+        <Suspense
+          fallback={
+            <Button variant="outline" disabled>
+              <FileArchive /> Download receipts
+            </Button>
+          }
+        >
+          {month.then((m) => (
+            <ReceiptExportDialog month={m} />
+          ))}
+        </Suspense>
       </PageHeader>
 
       <Card>
@@ -52,12 +74,12 @@ export default function ReceiptsPage({
           <CardTitle>Scanned receipts</CardTitle>
           <CardDescription>
             <Suspense fallback={<TextSkeleton className="w-40" />}>
-              <ReceiptLibraryCount search={search} />
+              <ReceiptLibraryCount month={month} search={search} />
             </Suspense>
           </CardDescription>
           <Suspense fallback={<ReceiptSearchForm />}>
-            {search.then((q) => (
-              <ReceiptSearchForm query={q} />
+            {Promise.all([search, month]).then(([q, m]) => (
+              <ReceiptSearchForm query={q} month={m} />
             ))}
           </Suspense>
         </CardHeader>
@@ -69,7 +91,7 @@ export default function ReceiptsPage({
                 <TableHead className="hidden sm:table-cell">Date</TableHead>
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead className="w-20">
-                  <span className="sr-only">Photo and month</span>
+                  <span className="sr-only">Receipt copy and month</span>
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -83,7 +105,7 @@ export default function ReceiptsPage({
                   </TableRow>
                 }
               >
-                <ReceiptLibraryRows search={search} />
+                <ReceiptLibraryRows month={month} search={search} />
               </Suspense>
             </TableBody>
           </Table>
