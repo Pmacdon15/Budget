@@ -68,11 +68,12 @@ describe("Receipts page", () => {
     expect(augustHtml).toContain('href="/expenses?month=2026-08"');
   });
 
-  it("filters by the search in the URL", async () => {
+  it("filters by the search in the URL regardless of month", async () => {
     await scan("user_a", "2026-08-14", "Home Depot");
     await scan("user_a", "2026-10-05", "Costco Wholesale");
 
-    const text = textOf(await render({ q: "depot", month: "2026-08" }));
+    // Viewing October 2026, searching for August receipt "depot"
+    const text = textOf(await render({ q: "depot", month: "2026-10" }));
     expect(text).toContain("1 match for “depot”");
     expect(text).toContain("Home Depot");
     expect(text).not.toContain("Costco Wholesale");

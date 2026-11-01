@@ -25,7 +25,6 @@ export function ReceiptSearchForm({
       aria-label="Search receipts"
       className="flex flex-wrap items-center gap-2"
     >
-      {month ? <input type="hidden" name="month" value={month} /> : null}
       <label htmlFor="receipt-search" className="sr-only">
         Search receipts
       </label>

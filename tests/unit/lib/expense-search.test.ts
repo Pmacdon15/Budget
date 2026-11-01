@@ -29,6 +29,23 @@ describe("parseExpenseSearch", () => {
       minCents: 1_000,
       maxCents: 125_050,
       allMonths: true,
+      scope: "all",
+    });
+  });
+
+  it("defaults to searching all months when search text is given without scope", () => {
+    expect(parseExpenseSearch({ q: "marks" })).toMatchObject({
+      q: "marks",
+      allMonths: true,
+      scope: "all",
+    });
+  });
+
+  it("restricts to month when scope=month is explicitly provided", () => {
+    expect(parseExpenseSearch({ q: "marks", scope: "month" })).toMatchObject({
+      q: "marks",
+      allMonths: false,
+      scope: "month",
     });
   });
 
@@ -86,7 +103,7 @@ describe("expenseSearchQuery", () => {
         max: "100",
         scope: "month",
       }),
-    ).toBe("month=2026-09&q=costco&category=Groceries&max=100");
+    ).toBe("month=2026-09&q=costco&category=Groceries&max=100&scope=month");
   });
 
   it("leaves out 'all categories' and replaces an earlier search", () => {
