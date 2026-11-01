@@ -122,7 +122,7 @@ describe("receipt files in the app", () => {
   it("Receipts lists an email receipt with view and download links", async () => {
     await expenseWithFile("email");
     const html = await renderPage(
-      ReceiptsPage({ searchParams: Promise.resolve({}) }),
+      ReceiptsPage({ searchParams: searchParams("2026-10") }),
     );
     expect(html).toMatch(new RegExp(`href="/api/receipts/${UUID}/email"`));
     expect(html).toMatch(
