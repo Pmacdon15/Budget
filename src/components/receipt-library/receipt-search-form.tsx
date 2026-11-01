@@ -11,7 +11,13 @@ import { RECEIPT_SEARCH_MAX_LENGTH } from "@/lib/schemas/receipt-library";
  * Without `query` it renders the empty form, which is the static shell's
  * fallback while the URL is unknown.
  */
-export function ReceiptSearchForm({ query = "" }: { query?: string }) {
+export function ReceiptSearchForm({
+  query = "",
+  month,
+}: {
+  query?: string;
+  month?: string;
+}) {
   return (
     <form
       action="/receipts"
@@ -19,6 +25,7 @@ export function ReceiptSearchForm({ query = "" }: { query?: string }) {
       aria-label="Search receipts"
       className="flex flex-wrap items-center gap-2"
     >
+      {month ? <input type="hidden" name="month" value={month} /> : null}
       <label htmlFor="receipt-search" className="sr-only">
         Search receipts
       </label>
@@ -35,7 +42,10 @@ export function ReceiptSearchForm({ query = "" }: { query?: string }) {
         <Search /> Search
       </Button>
       {query ? (
-        <Link href="/receipts" className={buttonVariants({ variant: "ghost" })}>
+        <Link
+          href={month ? `/receipts?month=${month}` : "/receipts"}
+          className={buttonVariants({ variant: "ghost" })}
+        >
           <X /> Clear
         </Link>
       ) : null}
