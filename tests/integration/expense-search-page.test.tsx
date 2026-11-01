@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import ExpensesPage from "@/app/(app)/expenses/page";
-import { insertExpense } from "@/db/expenses";
+import { insertExpense, insertExpenseLines } from "@/db/expenses";
 import { signInAs } from "../helpers/auth";
 import {
   pendingSearchParams,
@@ -92,5 +92,31 @@ describe("Spending page search", () => {
     expect(text).toContain("Search");
     expect(text).toContain("All categories");
     expect(text).toContain("This month");
+  });
+
+  it("renders photo receipt link when found via search", async () => {
+    await insertExpenseLines(
+      "user_a",
+      { month: "2026-10", spentOn: "2026-10-12", description: "Marks" },
+      [{ category: "Professional", amountCents: 4_934 }],
+      {
+        imagePathname: "receipts/user_a/marks.jpg",
+        merchant: "Marks",
+        purchasedOn: "2026-10-12",
+        subtotalCents: null,
+        taxCents: null,
+        totalCents: 4_934,
+        rawText: null,
+      },
+    );
+    const html = await renderPage(
+      ExpensesPage({
+        searchParams: Promise.resolve({ month: MONTH, q: "marks" }),
+      }),
+    );
+    expect(html).toContain("Marks");
+    expect(html).toContain("/api/receipts/");
+    expect(html).toContain("/image");
+    expect(html).toContain('title="View receipt photo"');
   });
 });

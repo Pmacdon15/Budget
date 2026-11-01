@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { db } from "@/db/client";
 import {
   type ExpenseFilters,
   likePattern,
@@ -120,5 +121,40 @@ describe("db/expense-search", () => {
   it("stops at the limit", async () => {
     await seed();
     expect(await names("user_a", { month: null, limit: 2 })).toHaveLength(2);
+  });
+
+  it("includes photo receipt details and kind on matched expenses", async () => {
+    await seed();
+    const matches = await selectMatchingExpenses("user_a", {
+      ...NONE,
+      text: "Weekly shop",
+    });
+    expect(matches).toHaveLength(1);
+    expect(matches[0]?.receiptId).toBeTruthy();
+    expect(matches[0]?.receiptHasPhoto).toBe(true);
+    expect(matches[0]?.receiptKind).toBe("photo");
+  });
+
+  it("shows receipt photo even when receipt row user_id differs", async () => {
+    await db()`
+      with r as (
+        insert into receipts (user_id, image_pathname, merchant)
+        values ('other_user', 'receipts/other_user/marks.jpg', 'Marks')
+        returning id
+      )
+      insert into expenses (user_id, month, spent_on, description, category, amount_cents, receipt_id)
+      select 'user_a', '2026-09', '2026-09-13', 'Marks work clothes', 'Professional', 4934, r.id
+      from r
+    `;
+
+    const matches = await selectMatchingExpenses("user_a", {
+      ...NONE,
+      month: null,
+      text: "marks",
+    });
+    expect(matches).toHaveLength(1);
+    expect(matches[0]?.description).toBe("Marks work clothes");
+    expect(matches[0]?.receiptHasPhoto).toBe(true);
+    expect(matches[0]?.receiptKind).toBe("photo");
   });
 });
