@@ -21,6 +21,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { currentMonth, firstDayOf, lastDayOf } from "@/lib/month";
 import {
   PERIOD_PRESETS,
   type PeriodPreset,
@@ -46,7 +47,7 @@ const FORMAT_OPTIONS: Record<
  * with a summary of everything spent (CSV, Excel and/or PDF, chosen at the
  * top) and a copy of every receipt, saved email and bill PDF in it.
  */
-export function ReceiptExportDialog() {
+export function ReceiptExportDialog({ month }: { month?: string } = {}) {
   const [open, setOpen] = useState(false);
   const [preset, setPreset] = useState<PeriodPreset | null>(null);
   const [from, setFrom] = useState("");
@@ -66,7 +67,15 @@ export function ReceiptExportDialog() {
 
   const onOpenChange = (next: boolean) => {
     // Today's date is read on open, not while rendering the page's shell.
-    if (next && !from && !to) choose("this-month");
+    if (next && !from && !to) {
+      if (month && month !== currentMonth()) {
+        setPreset(null);
+        setFrom(firstDayOf(month));
+        setTo(lastDayOf(month));
+      } else {
+        choose("this-month");
+      }
+    }
     setOpen(next);
   };
 
