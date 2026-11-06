@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CATEGORY_NAMES } from "@/lib/categories";
+import { CASH } from "@/lib/expense-accounts";
 import { formatMoney } from "@/lib/money";
 import {
   MAX_EMAIL_HTML_CHARS,
@@ -249,6 +250,9 @@ export const receiptInputSchema = z.object({
 
 export type ReceiptInput = z.output<typeof receiptInputSchema>;
 
+/** An account id from list_accounts, or CASH for spending paid in cash. */
+const accountOrCash = z.union([z.literal(CASH), z.uuid()]);
+
 /** What `add_expense` takes. Amounts are dollars, e.g. 45.67. */
 export const addExpenseInputSchema = z.object({
   amount: dollars.describe(
@@ -303,11 +307,10 @@ export const addExpenseInputSchema = z.object({
     .describe(
       "The fixed bill this charge pays, from find_matching_fixed_bill or list_fixed_bills, once the user agreed. Approving marks that month paid instead of adding separate spending.",
     ),
-  account_id: z
-    .uuid()
+  account_id: accountOrCash
     .optional()
     .describe(
-      "The account the charge was paid from (chequing, credit card or line of credit), from list_accounts, after the user confirmed it. Required when the user has more than one account: without it nothing is saved and the answer is status 'needs_account'. Never pick it yourself, even when the email names a card: ask the user, e.g. 'Paid from Visa ••1234?'.",
+      `The account the charge was paid from (chequing, credit card or line of credit), from list_accounts, after the user confirmed it, or "${CASH}" when the user says they paid cash: cash counts as spending but never changes an account balance. Required when the user has more than one account: without it nothing is saved and the answer is status 'needs_account'. Never pick it yourself, even when the email names a card: ask the user, e.g. 'Paid from Visa ••1234, or cash?'.`,
     ),
 });
 
@@ -337,11 +340,10 @@ export const editExpenseInputSchema = z.object({
   date: isoDate.optional().describe("New date, as YYYY-MM-DD."),
   description: label("Description").optional(),
   category: z.enum(CATEGORY_NAMES).optional(),
-  account_id: z
-    .uuid()
+  account_id: accountOrCash
     .optional()
     .describe(
-      "Move it to another account it was paid from, from list_accounts. Only when the user says it came out of a different account.",
+      `Move it to another account it was paid from, from list_accounts, or "${CASH}" when it was paid in cash. Only when the user says it came out of a different account.`,
     ),
 });
 

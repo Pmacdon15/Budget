@@ -16,7 +16,7 @@ import {
   dateLabel as statementDate,
 } from "@/lib/accounts";
 import { categoryLabel } from "@/lib/categories";
-import { needsAccountChoice } from "@/lib/expense-accounts";
+import { CASH, needsAccountChoice } from "@/lib/expense-accounts";
 import { formatMoney } from "@/lib/money";
 import type { PendingExpense } from "@/lib/pending-expenses";
 import type { PendingIncome } from "@/lib/pending-income";
@@ -131,7 +131,11 @@ function PendingRow({
             {item.merchant && item.merchant !== item.description
               ? ` · ${item.merchant}`
               : ""}
-            {item.accountName ? ` · paid from ${item.accountName}` : ""}
+            {item.accountId === CASH
+              ? " · paid in cash"
+              : item.accountName
+                ? ` · paid from ${item.accountName}`
+                : ""}
             {item.client ? ` · from ${item.client}` : ""}
           </p>
           {item.source ? (
