@@ -3,6 +3,7 @@ import { cacheLife, cacheTag } from "next/cache";
 import { userDataTag } from "@/db/cache-tags";
 import { db, type Row } from "@/db/client";
 import { type ReplacedFiles, receiptValues } from "@/db/receipt-files";
+import { accountColumns, CASH_ACCOUNT_ID } from "@/lib/expense-accounts";
 import type { ReceiptDetails } from "@/lib/pending-expenses";
 import { receiptKindOf } from "@/lib/receipt-files";
 import type { Expense, ExpenseExportRow } from "@/lib/types";
@@ -16,8 +17,9 @@ type ExpenseValues = {
   category: string;
   amountCents: number;
   /**
-   * The account it came out of; null for the primary chequing account. On an
-   * update, leaving it out keeps the account the expense has.
+   * The account it came out of; null for the primary chequing account,
+   * CASH_ACCOUNT_ID for cash. On an update, leaving it out keeps the account
+   * the expense has.
    */
   accountId?: string | null;
 };
@@ -64,7 +66,11 @@ export const toExpense = (r: Row): Expense => ({
   ...(r.fixed_item_id === undefined
     ? {}
     : { fixedItemId: r.fixed_item_id ?? null }),
-  ...(r.account_id === undefined ? {} : { accountId: r.account_id ?? null }),
+  ...(r.account_id === undefined
+    ? {}
+    : {
+        accountId: r.paid_cash ? CASH_ACCOUNT_ID : (r.account_id ?? null),
+      }),
 });
 
 export async function selectExpensesBetween(
@@ -77,7 +83,7 @@ export async function selectExpensesBetween(
   cacheLife("minutes");
   const rows = await db()`
     select id, month, spent_on, description, category, amount_cents, receipt_id,
-           unpaid, account_id,
+           unpaid, account_id, paid_cash,
            (select r.image_pathname is not null from receipts r
             where r.id = expenses.receipt_id) as receipt_has_photo,
            (select r.file_kind from receipts r
@@ -134,7 +140,7 @@ export async function selectExpenseById(
 ): Promise<Expense | null> {
   const rows = await db()`
     select id, month, spent_on, description, category, amount_cents, receipt_id,
-           unpaid, paid_on, fixed_item_id, account_id
+           unpaid, paid_on, fixed_item_id, account_id, paid_cash
     from expenses
     where id = ${id} and user_id = ${userId}
   `;
@@ -160,11 +166,13 @@ export async function countExpensesSharingReceipt(
 }
 
 export async function insertExpense(userId: string, values: ExpenseValues) {
+  const { accountUuid, paidCash } = accountColumns(values.accountId);
   await db()`
     insert into expenses (user_id, month, spent_on, description, category,
-                          amount_cents, account_id)
+                          amount_cents, account_id, paid_cash)
     values (${userId}, ${values.month}, ${values.spentOn}, ${values.description},
-            ${values.category}, ${values.amountCents}, ${values.accountId ?? null}::uuid)
+            ${values.category}, ${values.amountCents}, ${accountUuid}::uuid,
+            ${paidCash})
   `;
 }
 
@@ -187,14 +195,14 @@ export async function insertExpenseLines(
   const categories = lines.map((l) => l.category);
   const amounts = lines.map((l) => l.amountCents);
 
-  const accountId = base.accountId ?? null;
+  const { accountUuid: accountId, paidCash } = accountColumns(base.accountId);
 
   if (!receipt) {
     await db()`
       insert into expenses (user_id, month, spent_on, description, category,
-                            amount_cents, account_id)
+                            amount_cents, account_id, paid_cash)
       select ${userId}, ${base.month}, ${base.spentOn}, ${base.description},
-             line.category, line.amount_cents, ${accountId}::uuid
+             line.category, line.amount_cents, ${accountId}::uuid, ${paidCash}
       from unnest(${categories}::text[], ${amounts}::int[]) as line(category, amount_cents)
     `;
     return;
@@ -210,9 +218,10 @@ export async function insertExpenseLines(
       returning id
     )
     insert into expenses (user_id, month, spent_on, description, category,
-                          amount_cents, receipt_id, account_id)
+                          amount_cents, receipt_id, account_id, paid_cash)
     select ${userId}, ${base.month}, ${base.spentOn}, ${base.description},
-           line.category, line.amount_cents, saved.id, ${accountId}::uuid
+           line.category, line.amount_cents, saved.id, ${accountId}::uuid,
+           ${paidCash}
     from saved,
          unnest(${categories}::text[], ${amounts}::int[]) as line(category, amount_cents)
   `;
@@ -234,14 +243,17 @@ export async function updateExpenseRow(
   id: string,
   values: ExpenseValues,
 ): Promise<boolean> {
+  const keep = values.accountId === undefined;
+  const { accountUuid, paidCash } = accountColumns(values.accountId);
   const rows = await db()`
     update expenses
     set month = ${values.month}, spent_on = ${values.spentOn},
         description = ${values.description}, category = ${values.category},
         amount_cents = ${values.amountCents},
-        account_id = case when ${values.accountId !== undefined}::boolean
-                          then ${values.accountId ?? null}::uuid
-                          else account_id end
+        account_id = case when ${keep}::boolean then account_id
+                          else ${accountUuid}::uuid end,
+        paid_cash = case when ${keep}::boolean then paid_cash
+                         else ${paidCash}::boolean end
     where id = ${id} and user_id = ${userId}
     returning id
   `;
@@ -322,7 +334,7 @@ export async function selectExpensesWithStatus(
 ): Promise<ExpenseWithStatus[]> {
   const rows = await db()`
     select id, month, spent_on, description, category, amount_cents, receipt_id,
-           unpaid, fixed_item_id, account_id,
+           unpaid, fixed_item_id, account_id, paid_cash,
            (select r.image_pathname is not null from receipts r
             where r.id = expenses.receipt_id) as receipt_has_photo,
            (select r.file_kind from receipts r

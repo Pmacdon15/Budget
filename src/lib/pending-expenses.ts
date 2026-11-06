@@ -307,7 +307,13 @@ export const addExpenseInputSchema = z.object({
     .uuid()
     .optional()
     .describe(
-      "The account the charge was paid from (chequing, credit card or line of credit), from list_accounts, after the user confirmed it. Required when the user has more than one account: without it nothing is saved and the answer is status 'needs_account'. Never pick it yourself, even when the email names a card: ask the user, e.g. 'Paid from Visa ••1234?'.",
+      "The account the charge was paid from (chequing, credit card or line of credit), from list_accounts, after the user confirmed it. Required when the user has more than one account, unless it was paid in cash (paid_cash): without either, nothing is saved and the answer is status 'needs_account'. Never pick it yourself, even when the email names a card: ask the user, e.g. 'Paid from Visa ••1234, or cash?'.",
+    ),
+  paid_cash: z
+    .boolean()
+    .optional()
+    .describe(
+      "true when the user says they paid cash (or it's a receipt they want kept for a cash purchase). It counts toward spending but never comes off any account's balance, and no account_id is needed. Only when the user says so.",
     ),
 });
 
@@ -342,6 +348,12 @@ export const editExpenseInputSchema = z.object({
     .optional()
     .describe(
       "Move it to another account it was paid from, from list_accounts. Only when the user says it came out of a different account.",
+    ),
+  paid_cash: z
+    .boolean()
+    .optional()
+    .describe(
+      "true: it was paid in cash, so it comes off no account's balance. false (with account_id, when the user has more than one account) moves it back onto an account. Only when the user says so.",
     ),
 });
 

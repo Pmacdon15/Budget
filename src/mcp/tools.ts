@@ -45,7 +45,10 @@ import {
 import { isActive } from "@/lib/budget";
 import { CATEGORIES, isCategory } from "@/lib/categories";
 import {
+  CASH_ACCOUNT_ID,
+  CASH_LABEL,
   expenseAccountLabel,
+  isCash,
   resolveExpenseAccount,
 } from "@/lib/expense-accounts";
 import { currentMonth, monthOfDate, today } from "@/lib/month";
@@ -140,7 +143,7 @@ function needsAccount(
       unknown
         ? "That account_id isn't one of the user's accounts."
         : "The user has more than one account, so Budget needs to know which one this came out of."
-    } Nothing was saved. Their accounts: ${accountNames(accounts)}. Ask the user which one this was paid from, even when the email names a card, and wait for their answer. Then call ${tool} again with that account's account_id.`,
+    } Nothing was saved. Their accounts: ${accountNames(accounts)}. Ask the user which one this was paid from (or whether they paid cash), even when the email names a card, and wait for their answer. Then call ${tool} again with that account's account_id, or paid_cash: true for cash.`,
     data: {
       status: unknown ? "unknown_account" : "needs_account",
       accounts: accounts.map(accountOption),
@@ -194,6 +197,9 @@ export async function listExpenses(
   // No account on an expense means the main chequing account.
   const primary = accounts.find((a) => a.isPrimary) ?? null;
   const paidFrom = (accountId: string | null | undefined) => {
+    if (isCash(accountId)) {
+      return { account_id: null, account: CASH_LABEL, paid_cash: true };
+    }
     const account = accountId
       ? accounts.find((a) => a.id === accountId)
       : primary;
@@ -229,8 +235,9 @@ export async function listExpenses(
         fixed_bill_id: p.fixedItemId ?? null,
         is_subscription: p.isSubscription ?? "unknown",
         // Null: not confirmed yet, so the user picks one before approving.
-        account_id: p.accountId ?? null,
+        account_id: isCash(p.accountId) ? null : (p.accountId ?? null),
         account: p.accountName ?? null,
+        ...(isCash(p.accountId) ? { paid_cash: true } : {}),
       })),
     },
   };
@@ -310,7 +317,10 @@ async function addExpenseFor(
   // so a duplicate or fixed bill question comes first, and before the receipt
   // is stored, so asking leaves nothing behind.
   const accounts = await selectAccounts(caller.userId);
-  const choice = resolveExpenseAccount(accounts, input.account_id);
+  const choice = resolveExpenseAccount(
+    accounts,
+    input.paid_cash ? CASH_ACCOUNT_ID : input.account_id,
+  );
   if (choice.kind !== "ok") {
     return needsAccount(choice.accounts, choice.kind === "unknown");
   }
@@ -335,9 +345,12 @@ async function addExpenseFor(
         : input.is_subscription,
     accountId: choice.accountId,
   });
-  const paidFrom = choice.account
-    ? ` Paid from ${choice.account.name} (${accountTypeLabel(choice.account.type)}).`
-    : "";
+  const cash = isCash(choice.accountId);
+  const paidFrom = cash
+    ? " Paid in cash: it counts as spending but comes off no account's balance."
+    : choice.account
+      ? ` Paid from ${choice.account.name} (${accountTypeLabel(choice.account.type)}).`
+      : "";
   const notes = [
     fixedItemId
       ? "It pays a fixed bill: approving marks that month paid, so it isn't counted twice. If the amount differs, the user can choose Replace on the Review page to update the bill."
@@ -354,8 +367,9 @@ async function addExpenseFor(
     data: {
       status: "pending_review",
       id,
-      account_id: choice.accountId,
-      account_name: choice.account?.name ?? null,
+      account_id: cash ? null : choice.accountId,
+      account_name: cash ? CASH_LABEL : (choice.account?.name ?? null),
+      paid_cash: cash,
       review_url: REVIEW_URL,
       unpaid: input.unpaid ?? false,
       has_receipt: receipt !== null,
@@ -397,11 +411,31 @@ export async function editExpense(
     };
   }
   let account: Account | null = null;
-  if (input.account_id) {
+  const cash = input.paid_cash === true;
+  const offCash = input.paid_cash === false && isCash(existing.accountId);
+  if (!cash && input.account_id) {
     const accounts = await selectAccounts(caller.userId);
     account = accounts.find((a) => a.id === input.account_id) ?? null;
     if (!account) return needsAccount(accounts, true, "edit_expense");
+  } else if (offCash) {
+    // Back off cash with no account named: only the one account, never a guess.
+    const choice = resolveExpenseAccount(
+      await selectAccounts(caller.userId),
+      null,
+    );
+    if (choice.kind !== "ok") {
+      return needsAccount(choice.accounts, false, "edit_expense");
+    }
+    account = choice.account;
   }
+  // Left out (undefined), it keeps the account it has.
+  const accountId = cash
+    ? CASH_ACCOUNT_ID
+    : account
+      ? account.id
+      : offCash
+        ? null
+        : undefined;
   const spentOn = input.date ?? existing.spentOn;
   const values = {
     month: monthOfDate(spentOn),
@@ -410,19 +444,22 @@ export async function editExpense(
     category: input.category ?? existing.category,
     amountCents:
       input.amount === undefined ? existing.amountCents : toCents(input.amount),
-    // Left out, it keeps the account it has.
-    accountId: account ? account.id : undefined,
+    accountId,
   };
   await updateExpenseRow(caller.userId, input.id, values);
   return {
-    summary: `Updated: ${values.description}, $${(values.amountCents / 100).toFixed(2)} on ${values.spentOn} (${values.category})${account ? `, paid from ${account.name}` : ""}.`,
+    summary: `Updated: ${values.description}, $${(values.amountCents / 100).toFixed(2)} on ${values.spentOn} (${values.category})${cash ? ", paid in cash" : account ? `, paid from ${account.name}` : ""}.`,
     data: {
       id: input.id,
       date: values.spentOn,
       description: values.description,
       category: values.category,
       amount: dollars(values.amountCents),
-      ...(account ? { account_id: account.id, account: account.name } : {}),
+      ...(cash
+        ? { account_id: null, account: CASH_LABEL, paid_cash: true }
+        : account
+          ? { account_id: account.id, account: account.name, paid_cash: false }
+          : {}),
     },
   };
 }

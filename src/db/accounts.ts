@@ -96,7 +96,8 @@ function toAccount(r: Row): Account {
  *   zone; an unpaid expense waits until it's paid): less for chequing, more
  *   owed for a credit card or line of credit. An expense with no account_id
  *   (every one saved before accounts) was paid from the primary chequing
- *   account, which also loses paid bills by the same rule, and
+ *   account, unless it was paid in cash (paid_cash), which comes off no
+ *   account. The primary account also loses paid bills by the same rule, and
  * - for every account, plus or minus transfers that came after it by the same
  *   rule. Transfers are never expenses, so they're never counted as spending.
  * - for every account, plus take-home entries deposited into it (income with
@@ -125,7 +126,9 @@ export async function selectAccounts(
              where e.user_id = a.user_id
                -- Paid from this account, or (no account given) from the
                -- primary chequing account, as every expense was before accounts.
-               and (e.account_id = a.id or (e.account_id is null and a.is_primary))
+               -- Cash never comes off any account.
+               and (e.account_id = a.id
+                    or (e.account_id is null and a.is_primary and not e.paid_cash))
                and not e.unpaid
                and coalesce(e.paid_at, e.created_at) > a.balance_as_of
                and coalesce(e.paid_on, e.spent_on)

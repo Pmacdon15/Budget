@@ -1,6 +1,11 @@
 import "server-only";
 import { db, type Row } from "@/db/client";
 import type { ReplacedFiles } from "@/db/receipt-files";
+import {
+  accountColumns,
+  CASH_ACCOUNT_ID,
+  CASH_LABEL,
+} from "@/lib/expense-accounts";
 import type {
   DuplicateMatch,
   PendingExpense,
@@ -24,7 +29,7 @@ export type PendingValues = {
   fixedItemId?: string | null;
   /** Whether it's a subscription, when the AI or the user said. Null: unknown. */
   isSubscription?: boolean | null;
-  /** The account it was paid from, once the user confirmed it. */
+  /** The account it was paid from (or CASH_ACCOUNT_ID), once the user confirmed it. */
   accountId?: string | null;
 };
 
@@ -88,8 +93,8 @@ const toPending = (r: Row): PendingExpense => ({
       : Number(r.fixed_item_amount_cents),
   fixedItemIsEstimate: Boolean(r.fixed_item_is_estimate),
   isSubscription: r.is_subscription == null ? null : Boolean(r.is_subscription),
-  accountId: r.account_id ?? null,
-  accountName: r.account_name ?? null,
+  accountId: r.paid_cash ? CASH_ACCOUNT_ID : (r.account_id ?? null),
+  accountName: r.paid_cash ? CASH_LABEL : (r.account_name ?? null),
 });
 
 /** Saves an item for review and returns its id. */
@@ -97,17 +102,18 @@ export async function insertPendingExpense(
   userId: string,
   values: PendingValues,
 ): Promise<string> {
+  const { accountUuid, paidCash } = accountColumns(values.accountId);
   const [row] = await db()`
     insert into pending_expenses (user_id, spent_on, description, merchant,
                                   category, amount_cents, source, client,
                                   unpaid, receipt, fixed_item_id, is_subscription,
-                                  account_id)
+                                  account_id, paid_cash)
     values (${userId}, ${values.spentOn}, ${values.description}, ${values.merchant},
             ${values.category}, ${values.amountCents}, ${values.source}, ${values.client},
             ${values.unpaid ?? false},
             ${values.receipt ? receiptJson(values.receipt) : null}::jsonb,
             ${values.fixedItemId ?? null}, ${values.isSubscription ?? null}::boolean,
-            ${values.accountId ?? null}::uuid)
+            ${accountUuid}::uuid, ${paidCash})
     returning id
   `;
   return String(row?.id);
@@ -120,7 +126,7 @@ export async function selectPendingExpenses(
   const rows = await db()`
     select p.id, p.spent_on, p.description, p.merchant, p.category,
            p.amount_cents, p.source, p.client, p.created_at, p.unpaid,
-           p.receipt, p.is_subscription,
+           p.receipt, p.is_subscription, p.paid_cash,
            -- An account that's since been deleted reads as not chosen.
            acct.id as account_id, acct.name as account_name,
            bill.id as fixed_item_id, bill.name as fixed_item_name,
@@ -211,13 +217,16 @@ export async function updatePendingExpense(
   >,
 ): Promise<boolean> {
   // Leaving accountId out keeps the account the item has.
+  const keep = values.accountId === undefined;
+  const { accountUuid, paidCash } = accountColumns(values.accountId);
   const rows = await db()`
     update pending_expenses
     set spent_on = ${values.spentOn}, description = ${values.description},
         category = ${values.category}, amount_cents = ${values.amountCents},
-        account_id = case when ${values.accountId !== undefined}::boolean
-                          then ${values.accountId ?? null}::uuid
-                          else account_id end
+        account_id = case when ${keep}::boolean then account_id
+                          else ${accountUuid}::uuid end,
+        paid_cash = case when ${keep}::boolean then paid_cash
+                         else ${paidCash}::boolean end
     where id = ${id} and user_id = ${userId}
     returning id
   `;
@@ -237,13 +246,14 @@ export async function updatePendingExpense(
  * matched (missing, already handled, or not this user's).
  *
  * `accountId` is the account the expense comes out of, as the caller worked
- * it out (null: the primary chequing account).
+ * it out (null: the primary chequing account, CASH_ACCOUNT_ID: cash).
  */
 export async function approvePendingExpense(
   userId: string,
   id: string,
   accountId: string | null,
 ): Promise<{ expenseId: string; fixedItemId: string | null } | null> {
+  const { accountUuid, paidCash } = accountColumns(accountId);
   const rows = await db()`
     with taken as (
       delete from pending_expenses
@@ -298,11 +308,11 @@ export async function approvePendingExpense(
     saved as (
       insert into expenses (user_id, month, spent_on, description, category,
                             amount_cents, unpaid, paid_at, paid_on, receipt_id,
-                            fixed_item_id, account_id)
+                            fixed_item_id, account_id, paid_cash)
       select user_id, month, spent_on, description, category, amount_cents,
              unpaid, paid_at, paid_on, (select id from saved_receipt limit 1),
              coalesce((select id from bill), (select id from new_bill)),
-             ${accountId}::uuid
+             ${accountUuid}::uuid, ${paidCash}
       from taken
       returning id, user_id, month, spent_on, unpaid, paid_on, amount_cents,
                 fixed_item_id

@@ -154,7 +154,10 @@ export async function restoreExpense(
     ),
     restored as (
       insert into expenses
-      select (jsonb_populate_record(null::expenses, entry.record)).*
+      -- An expense deleted before cash expenses existed has no paid_cash.
+      select (jsonb_populate_record(
+        null::expenses, '{"paid_cash": false}'::jsonb || entry.record
+      )).*
       from entry
       where entry.record->>'user_id' = ${userId}
       on conflict (id) do nothing

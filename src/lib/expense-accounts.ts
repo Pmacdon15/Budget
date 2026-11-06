@@ -20,6 +20,26 @@ export type ExpenseAccountOption = Pick<
 
 export const ACCOUNT_REQUIRED_MESSAGE = "Choose the account this came out of";
 
+/**
+ * The "account" of an expense paid in cash. It counts toward spending like any
+ * other expense but never comes off any account's balance. Stored as
+ * `paid_cash` with an empty account_id (see the cash-expenses migration); in
+ * the app it travels as this account id, so forms, the review list and the
+ * MCP tools pass it like any other.
+ */
+export const CASH_ACCOUNT_ID = "cash";
+
+export const CASH_LABEL = "Cash";
+
+export const isCash = (accountId: string | null | undefined) =>
+  accountId === CASH_ACCOUNT_ID;
+
+/** The columns an account id is stored as: a real account's uuid, or paid_cash. */
+export const accountColumns = (accountId: string | null | undefined) => ({
+  accountUuid: isCash(accountId) ? null : (accountId ?? null),
+  paidCash: isCash(accountId),
+});
+
 export const UNKNOWN_ACCOUNT_MESSAGE =
   "That account no longer exists. Choose another.";
 
@@ -30,6 +50,13 @@ export function expenseAccountLabel(
   const subtitle = accountSubtitle(account);
   return subtitle ? `${account.name} (${subtitle})` : account.name;
 }
+
+/**
+ * Whether the form offers "Paid from" at all: with any account, so cash can be
+ * picked. With none, nothing comes off a balance anyway.
+ */
+export const offersAccountChoice = (accounts: readonly unknown[]) =>
+  accounts.length > 0;
 
 /** With more than one account, the user has to say which one paid. */
 export const needsAccountChoice = (accounts: readonly unknown[]) =>
@@ -45,7 +72,13 @@ export const accountIdField = z
   .string()
   .optional()
   .transform((value) => value?.trim() || null)
-  .pipe(z.uuid({ error: ACCOUNT_REQUIRED_MESSAGE }).nullable());
+  .pipe(
+    z
+      .union([z.literal(CASH_ACCOUNT_ID), z.uuid()], {
+        error: ACCOUNT_REQUIRED_MESSAGE,
+      })
+      .nullable(),
+  );
 
 /** Adds "an account must be chosen" to a form schema, for a user with several accounts. */
 export function requireAccount<T extends z.ZodType<{ accountId?: unknown }>>(
@@ -63,7 +96,10 @@ export function requireAccount<T extends z.ZodType<{ accountId?: unknown }>>(
 }
 
 export type AccountChoice<T> =
-  /** Use this account (null only when the user has no accounts at all). */
+  /**
+   * Use this account: CASH_ACCOUNT_ID for cash (account null), null only when
+   * the user has no accounts at all.
+   */
   | { kind: "ok"; accountId: string | null; account: T | null }
   /** Several accounts and none was named: ask the user which. */
   | { kind: "choose"; accounts: T[] }
@@ -71,14 +107,18 @@ export type AccountChoice<T> =
   | { kind: "unknown"; accounts: T[] };
 
 /**
- * Which account an expense comes out of. A named account must be one of the
- * user's. With none named: no accounts at all is the old bank balance
- * behaviour (null), a single account is that one, and several means asking.
+ * Which account an expense comes out of. Cash is always allowed. A named
+ * account must be one of the user's. With none named: no accounts at all is
+ * the old bank balance behaviour (null), a single account is that one, and
+ * several means asking.
  */
 export function resolveExpenseAccount<T extends { id: string }>(
   accounts: T[],
   requested: string | null | undefined,
 ): AccountChoice<T> {
+  if (isCash(requested)) {
+    return { kind: "ok", accountId: CASH_ACCOUNT_ID, account: null };
+  }
   if (requested) {
     const account = accounts.find((a) => a.id === requested);
     return account

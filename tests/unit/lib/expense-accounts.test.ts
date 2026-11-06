@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   ACCOUNT_REQUIRED_MESSAGE,
+  accountColumns,
+  CASH_ACCOUNT_ID,
   expenseAccountLabel,
   needsAccountChoice,
   requireAccount,
@@ -42,6 +44,30 @@ describe("resolveExpenseAccount", () => {
     expect(resolveExpenseAccount([cheq, card], "z").kind).toBe("unknown");
     expect(resolveExpenseAccount([], "z").kind).toBe("unknown");
   });
+
+  it("always takes cash, whatever accounts there are", () => {
+    for (const accounts of [[], [cheq], [cheq, card]]) {
+      expect(resolveExpenseAccount(accounts, CASH_ACCOUNT_ID)).toEqual({
+        kind: "ok",
+        accountId: CASH_ACCOUNT_ID,
+        account: null,
+      });
+    }
+  });
+});
+
+describe("accountColumns", () => {
+  it("stores cash as paid_cash with no account", () => {
+    expect(accountColumns(CASH_ACCOUNT_ID)).toEqual({
+      accountUuid: null,
+      paidCash: true,
+    });
+    expect(accountColumns("b")).toEqual({ accountUuid: "b", paidCash: false });
+    expect(accountColumns(null)).toEqual({
+      accountUuid: null,
+      paidCash: false,
+    });
+  });
 });
 
 describe("the account field", () => {
@@ -57,6 +83,15 @@ describe("the account field", () => {
       null,
     );
     expect(expenseSchema.parse(values).accountId).toBe(null);
+  });
+
+  it("takes cash or an account id, nothing else", () => {
+    expect(
+      expenseSchema.parse({ ...values, accountId: CASH_ACCOUNT_ID }).accountId,
+    ).toBe(CASH_ACCOUNT_ID);
+    expect(
+      expenseSchema.safeParse({ ...values, accountId: "visa" }).success,
+    ).toBe(false);
   });
 
   it("rejects something that isn't an account id", () => {

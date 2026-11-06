@@ -5,7 +5,10 @@ import * as expenseActions from "@/actions/expenses";
 import * as pendingActions from "@/actions/pending-expenses";
 import { ExpenseDialog } from "@/components/forms/expense-dialog";
 import { PendingEditDialog } from "@/components/review/pending-edit-dialog";
-import type { ExpenseAccountOption } from "@/lib/expense-accounts";
+import {
+  CASH_ACCOUNT_ID,
+  type ExpenseAccountOption,
+} from "@/lib/expense-accounts";
 import type { PendingExpense } from "@/lib/pending-expenses";
 import { fetchExpenseAccounts } from "@/queries/expense-accounts";
 import { expense } from "../../helpers/fixtures";
@@ -82,8 +85,8 @@ async function fillIn(
 }
 
 describe("Paid from in the expense form", () => {
-  it("isn't shown with one account, and the expense saves without it", async () => {
-    haveAccounts([CHEQUING]);
+  it("isn't shown with no accounts, and the expense saves without it", async () => {
+    haveAccounts([]);
     renderWithQuery(<ExpenseDialog month="2026-10" trigger={trigger} />);
     const { user, dialog } = await openForm();
     await fillIn(user, dialog);
@@ -93,6 +96,57 @@ describe("Paid from in the expense form", () => {
     );
     await waitFor(() =>
       expect(expenseActions.createExpense).toHaveBeenCalled(),
+    );
+  });
+
+  it("starts on the only account with one, so cash can still be picked", async () => {
+    haveAccounts([CHEQUING]);
+    renderWithQuery(<ExpenseDialog month="2026-10" trigger={trigger} />);
+    const { user, dialog } = await openForm();
+    const picker = await within(dialog).findByLabelText("Paid from");
+    expect(picker).toHaveTextContent("Chequing");
+    await fillIn(user, dialog);
+    await user.click(
+      within(dialog).getByRole("button", { name: "Add expense" }),
+    );
+    await waitFor(() =>
+      expect(expenseActions.createExpense).toHaveBeenCalledWith(
+        expect.objectContaining({ accountId: CHEQUING.id }),
+      ),
+    );
+  });
+
+  it("offers cash with several accounts", async () => {
+    haveAccounts([CHEQUING, VISA]);
+    renderWithQuery(<ExpenseDialog month="2026-10" trigger={trigger} />);
+    const { user, dialog } = await openForm();
+    const picker = await within(dialog).findByLabelText("Paid from");
+    await fillIn(user, dialog);
+    await user.click(picker);
+    await user.click(await screen.findByRole("option", { name: "Cash" }));
+    expect(picker).toHaveTextContent("Cash");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Add expense" }),
+    );
+    await waitFor(() =>
+      expect(expenseActions.createExpense).toHaveBeenCalledWith(
+        expect.objectContaining({ accountId: CASH_ACCOUNT_ID }),
+      ),
+    );
+  });
+
+  it("starts an edit of a cash expense on Cash", async () => {
+    haveAccounts([CHEQUING, VISA]);
+    renderWithQuery(
+      <ExpenseDialog
+        month="2026-10"
+        expense={expense({ accountId: CASH_ACCOUNT_ID })}
+        trigger={trigger}
+      />,
+    );
+    const { dialog } = await openForm();
+    expect(await within(dialog).findByLabelText("Paid from")).toHaveTextContent(
+      "Cash",
     );
   });
 
