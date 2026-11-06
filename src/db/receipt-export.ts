@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/db/client";
+import { CASH_LABEL } from "@/lib/expense-accounts";
 import type { ExpenditureRow } from "@/lib/receipt-export";
 import { isReceiptFileKind, receiptKindOf } from "@/lib/receipt-files";
 
@@ -37,7 +38,7 @@ export async function selectExpenditures(
              r.merchant,
              round(r.subtotal_cents::numeric * e.amount_cents / nullif(parts.spend, 0))::int as subtotal_cents,
              round(r.tax_cents::numeric * e.amount_cents / nullif(parts.spend, 0))::int as tax_cents,
-             a.name as account,
+             case when e.paid_cash then ${CASH_LABEL}::text else a.name end as account,
              r.id as receipt_id, r.file_kind, r.file_name,
              (r.image_pathname is not null) as has_photo,
              (r.file_pathname is not null) as has_file,
@@ -74,7 +75,7 @@ export async function selectExpenditures(
              false,
              coalesce(r.merchant, f.merchant),
              r.subtotal_cents, r.tax_cents,
-             a.name,
+             case when pe.paid_cash then ${CASH_LABEL}::text else a.name end,
              r.id, r.file_kind, r.file_name,
              (r.image_pathname is not null),
              (r.file_pathname is not null),
