@@ -48,7 +48,10 @@ const cents = z.preprocess(
     .catch(null),
 );
 
-const scope = z.preprocess(first, z.enum(["month", "all"]).catch("month"));
+const scope = z.preprocess(
+  first,
+  z.enum(["month", "all"]).optional().catch(undefined),
+);
 
 export const expenseSearchSchema = z
   .object({ q: text, category, min: cents, max: cents, scope })
@@ -56,7 +59,17 @@ export const expenseSearchSchema = z
     // A range typed back to front still means what the person meant.
     const [minCents, maxCents] =
       min !== null && max !== null && min > max ? [max, min] : [min, max];
-    return { q, category, minCents, maxCents, allMonths: scope === "all" };
+    // Searching text finds matches across all months regardless of month,
+    // unless the search is explicitly scoped to "month".
+    const allMonths = scope === "all" || (scope !== "month" && q !== "");
+    return {
+      q,
+      category,
+      minCents,
+      maxCents,
+      allMonths,
+      scope: scope ?? (allMonths ? "all" : undefined),
+    };
   });
 
 export type ExpenseSearch = z.output<typeof expenseSearchSchema>;
@@ -67,6 +80,7 @@ export const EMPTY_SEARCH: ExpenseSearch = {
   minCents: null,
   maxCents: null,
   allMonths: false,
+  scope: undefined,
 };
 
 export function parseExpenseSearch(
@@ -120,7 +134,11 @@ export function expenseSearchQuery(
   if (min) next.set("min", min);
   const max = values.max?.trim();
   if (max) next.set("max", max);
-  if (values.scope === "all") next.set("scope", "all");
+  if (values.scope === "all") {
+    next.set("scope", "all");
+  } else if (values.scope === "month" && q) {
+    next.set("scope", "month");
+  }
 
   return next.toString();
 }

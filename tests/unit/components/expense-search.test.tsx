@@ -31,7 +31,7 @@ describe("ExpenseSearchForm", () => {
     await user.click(screen.getByRole("button", { name: "Search" }));
 
     expect(nav.replace).toHaveBeenCalledWith(
-      "/expenses?month=2026-09&q=costco&min=20",
+      "/expenses?month=2026-09&q=costco&min=20&scope=all",
       { scroll: false },
     );
   });
