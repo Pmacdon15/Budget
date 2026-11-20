@@ -18,6 +18,7 @@ import {
 import { isCategory } from "@/lib/categories";
 import { resolveExpenseAccount } from "@/lib/expense-accounts";
 import { monthOfDate } from "@/lib/month";
+import { deleteReceiptImage } from "@/lib/receipt-store";
 import type { ExpenseInput } from "@/lib/schemas";
 
 /*
@@ -137,7 +138,12 @@ export async function setPendingSubscription(
 
 export async function rejectPending(id: string) {
   const userId = await currentUserIdOrThrow();
-  if (!(await deletePendingExpense(userId, id))) {
+  const deleted = await deletePendingExpense(userId, id);
+  if (!deleted) {
     throw new NotFoundError(GONE);
+  }
+  if (deleted.imagePathname) await deleteReceiptImage(deleted.imagePathname);
+  if (deleted.filePathname && deleted.filePathname !== deleted.imagePathname) {
+    await deleteReceiptImage(deleted.filePathname);
   }
 }

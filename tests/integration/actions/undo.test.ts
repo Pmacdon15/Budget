@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createExpense } from "@/actions/expenses";
 import { createFixedItem } from "@/actions/fixed-items";
 import { createIncome } from "@/actions/income";
+import { rejectPendingExpense } from "@/actions/pending-expenses";
 import { recordRecurringIncome } from "@/actions/recurring-income";
 import {
   deleteExpenseWithUndo,
@@ -10,6 +11,7 @@ import {
   type UndoableResult,
   undoDelete,
 } from "@/actions/undo";
+import { insertPendingExpense } from "@/db/pending-expenses";
 import { deleteReceiptImage } from "@/lib/receipt-store";
 import type { ExpenseFormValues } from "@/lib/schemas";
 import { UNDO_WINDOW_MINUTES } from "@/lib/undo";
@@ -157,6 +159,55 @@ describe("undo after deleting an expense", () => {
     expect(await rows("select image_pathname from receipts")).toEqual([
       { image_pathname: OWN_PHOTO },
     ]);
+  });
+
+  it("removes an orphaned PDF receipt file after the undo window has passed", async () => {
+    const pdfPath = "receipts/user_a/2b7e1c2a-9f2d-4c1e-8a3b-1d2e3f4a5b6c.pdf";
+    const [receipt] = await rows(
+      `insert into receipts (user_id, merchant, total_cents, file_pathname, file_kind, file_name)
+       values ('user_a', 'Hydro', 8500, '${pdfPath}', 'pdf', 'bill.pdf') returning id`,
+    );
+    const [expense] = await rows(
+      `insert into expenses (user_id, month, spent_on, description, category, amount_cents, receipt_id)
+       values ('user_a', '2026-10', '2026-10-05', 'Hydro', 'Utilities', 8500, '${receipt?.id}') returning id`,
+    );
+
+    await deleteExpenseWithUndo(expense?.id as string);
+    expect(deleteReceiptImage).not.toHaveBeenCalled();
+
+    await expireUndo();
+    await triggerPurge();
+
+    expect(deleteReceiptImage).toHaveBeenCalledWith(pdfPath);
+  });
+
+  it("removes attached receipt files when rejecting a pending expense", async () => {
+    const pdfPath = "receipts/user_a/7a7e1c2a-9f2d-4c1e-8a3b-1d2e3f4a5b6c.pdf";
+    const pendingId = await insertPendingExpense("user_a", {
+      spentOn: "2026-10-20",
+      description: "Shell",
+      merchant: "Shell",
+      category: "Transportation",
+      amountCents: 4_567,
+      source: "Email",
+      client: "Claude",
+      receipt: {
+        merchant: "Shell",
+        purchasedOn: "2026-10-20",
+        subtotalCents: null,
+        taxCents: null,
+        totalCents: 4_567,
+        rawText: null,
+        imagePathname: OWN_PHOTO,
+        filePathname: pdfPath,
+        fileKind: "pdf",
+        fileName: "shell.pdf",
+      },
+    });
+
+    expect(await rejectPendingExpense(pendingId)).toEqual({ ok: true });
+    expect(deleteReceiptImage).toHaveBeenCalledWith(OWN_PHOTO);
+    expect(deleteReceiptImage).toHaveBeenCalledWith(pdfPath);
   });
 });
 

@@ -262,17 +262,25 @@ export async function approvePendingIncome(
 }
 
 /**
- * Removes the item without saving it. Its receipt copy, now unused, is
- * removed by the receipt cleanup job, as for a rejected expense. Returns
- * false when no row matched (missing, or not this user's).
+ * Removes the item without saving it and returns the copies its receipt had
+ * (when any), so the caller can remove them from storage. Null when no row
+ * matched (missing, or not this user's).
  */
 export async function deletePendingIncome(
   userId: string,
   id: string,
-): Promise<boolean> {
-  const rows = await db()`
+): Promise<{
+  imagePathname: string | null;
+  filePathname: string | null;
+} | null> {
+  const [row] = await db()`
     delete from pending_income where id = ${id} and user_id = ${userId}
-    returning id
+    returning receipt->>'image_pathname' as image_pathname,
+              receipt->>'file_pathname' as file_pathname
   `;
-  return rows.length > 0;
+  if (!row) return null;
+  return {
+    imagePathname: row.image_pathname ? String(row.image_pathname) : null,
+    filePathname: row.file_pathname ? String(row.file_pathname) : null,
+  };
 }
