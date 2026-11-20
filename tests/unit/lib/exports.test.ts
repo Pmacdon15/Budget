@@ -1,3 +1,4 @@
+import { inflateRawSync } from "node:zlib";
 import { PDFDocument } from "pdf-lib";
 import { describe, expect, it, vi } from "vitest";
 import { CATEGORY_NAMES } from "@/lib/categories";
@@ -11,6 +12,7 @@ import {
   rangeLabel,
   totalsByCategory,
 } from "@/lib/exports/expenses";
+import { buildXlsx, safeSpreadsheetText } from "@/lib/exports/xlsx";
 import type { ExpenseExportInput } from "@/lib/schemas";
 import type { ExpenseExportRow } from "@/lib/types";
 
@@ -94,10 +96,61 @@ describe("csvCell", () => {
     expect(csvCell('=HYPERLINK("http://example.com")')).toBe(
       '"\'=HYPERLINK(""http://example.com"")"',
     );
+    expect(csvCell("\n=cmd")).toBe('"\'\n=cmd"');
+    expect(csvCell("|cmd")).toBe("'|cmd");
+    expect(csvCell("  =SUM(A1)")).toBe("'  =SUM(A1)");
+    expect(csvCell(" \t+1")).toBe("' \t+1");
   });
 
   it("joins rows", () => {
     expect(toCsv([["a", "-1.50"], [], ["=1", 2]])).toBe("a,-1.50\n\n'=1,2");
+  });
+});
+
+function unzipEntry(zip: Uint8Array, name: string): string {
+  const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+  let p = 0;
+  while (view.getUint32(p, true) === 0x04034b50) {
+    const method = view.getUint16(p + 8, true);
+    const size = view.getUint32(p + 18, true);
+    const nameLength = view.getUint16(p + 26, true);
+    const extra = view.getUint16(p + 28, true);
+    const entry = new TextDecoder().decode(
+      zip.slice(p + 30, p + 30 + nameLength),
+    );
+    const start = p + 30 + nameLength + extra;
+    const data = zip.slice(start, start + size);
+    if (entry === name) {
+      return new TextDecoder().decode(
+        method === 8 ? inflateRawSync(data) : data,
+      );
+    }
+    p = start + size;
+  }
+  throw new Error(`${name} not in archive`);
+}
+
+describe("buildXlsx formula defusing", () => {
+  it("defuses formula prefixes in inline strings", () => {
+    expect(safeSpreadsheetText("=SUM(A1)")).toBe("'=SUM(A1)");
+    expect(safeSpreadsheetText("\n=cmd")).toBe("'\n=cmd");
+    expect(safeSpreadsheetText("|cmd")).toBe("'|cmd");
+    expect(safeSpreadsheetText("  =SUM(A1)")).toBe("'  =SUM(A1)");
+    expect(safeSpreadsheetText("-15.00")).toBe("-15.00");
+
+    const zip = buildXlsx([
+      {
+        name: "Test",
+        rows: [
+          ["\n=cmd", "|cmd", { value: "  =SUM(A1)", style: "bold" }, "-15.00"],
+        ],
+      },
+    ]);
+    const sheet = unzipEntry(zip, "xl/worksheets/sheet1.xml");
+    expect(sheet).toContain('<t xml:space="preserve">\'\n=cmd</t>');
+    expect(sheet).toContain('<t xml:space="preserve">\'|cmd</t>');
+    expect(sheet).toContain('<t xml:space="preserve">\'  =SUM(A1)</t>');
+    expect(sheet).toContain('<t xml:space="preserve">-15.00</t>');
   });
 });
 

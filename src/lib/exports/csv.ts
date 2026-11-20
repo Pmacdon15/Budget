@@ -1,6 +1,9 @@
 /** A plain decimal amount like `-15.00`, which a spreadsheet reads as a number. */
 const DECIMAL = /^-?\d+(\.\d+)?$/;
 
+/** Leading characters that spreadsheet parsers interpret as formula or DDE prefixes. */
+const FORMULA_PREFIX = /^[=+\-@|\t\r\n]/;
+
 /**
  * One CSV cell: quoted where needed, with text a spreadsheet would run as a
  * formula defused by a leading `'` (descriptions can come from receipt text,
@@ -11,7 +14,7 @@ export function csvCell(value: string | number) {
   let text = String(value);
   if (
     typeof value === "string" &&
-    /^[=+\-@\t\r]/.test(text) &&
+    (FORMULA_PREFIX.test(text) || FORMULA_PREFIX.test(text.trimStart())) &&
     !DECIMAL.test(text)
   )
     text = `'${text}`;
