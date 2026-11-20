@@ -39,7 +39,7 @@ export async function deleteExpenseKeepingUndo(
           select 1 from expenses other
           where other.receipt_id = r.id and other.id <> removed.id
         )
-      returning r.image_pathname
+      returning coalesce(r.image_pathname, r.file_pathname) as image_pathname
     ),
     saved as (
       insert into undo_deletes (user_id, kind, record, receipt, image_pathname)
@@ -249,8 +249,9 @@ export async function restoreIncome(
 
 /**
  * Drops this user's undo entries older than the window and returns the photos
- * they orphaned that nothing uses any more (no receipt, and no fresh undo entry
- * that could bring one back), so the caller can remove them from storage.
+ * and files they orphaned that nothing uses any more (no receipt, and no fresh
+ * undo entry that could bring one back), so the caller can remove them from
+ * storage.
  */
 export async function purgeExpiredUndo(
   userId: string,
@@ -261,19 +262,28 @@ export async function purgeExpiredUndo(
       delete from undo_deletes
       where user_id = ${userId}
         and created_at <= now() - make_interval(mins => ${windowMinutes}::int)
-      returning image_pathname
+      returning image_pathname, receipt->>'file_pathname' as file_pathname
+    ),
+    candidates as (
+      select image_pathname as pathname from purged where image_pathname is not null
+      union
+      select file_pathname as pathname from purged where file_pathname is not null
     )
-    select distinct p.image_pathname from purged p
-    where p.image_pathname is not null
-      and not exists (
-        select 1 from receipts r where r.image_pathname = p.image_pathname
+    select distinct c.pathname from candidates c
+    where not exists (
+        select 1 from receipts r
+        where r.image_pathname = c.pathname or r.file_pathname = c.pathname
       )
       and not exists (
         select 1 from undo_deletes u
         where u.user_id = ${userId}
-          and u.receipt->>'image_pathname' = p.image_pathname
+          and (
+            u.image_pathname = c.pathname
+            or u.receipt->>'image_pathname' = c.pathname
+            or u.receipt->>'file_pathname' = c.pathname
+          )
           and u.created_at > now() - make_interval(mins => ${windowMinutes}::int)
       )
   `;
-  return rows.map((r) => String(r.image_pathname));
+  return rows.map((r) => String(r.pathname));
 }

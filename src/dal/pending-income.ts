@@ -7,6 +7,7 @@ import {
   deletePendingIncome,
   selectPendingIncomeList,
 } from "@/db/pending-income";
+import { deleteReceiptImage } from "@/lib/receipt-store";
 
 /*
  * The Review page's side of income an AI submitted (an e-Transfer someone
@@ -31,7 +32,12 @@ export async function approveIncome(id: string) {
 
 export async function rejectIncome(id: string) {
   const userId = await currentUserIdOrThrow();
-  if (!(await deletePendingIncome(userId, id))) {
+  const deleted = await deletePendingIncome(userId, id);
+  if (!deleted) {
     throw new NotFoundError(GONE);
+  }
+  if (deleted.imagePathname) await deleteReceiptImage(deleted.imagePathname);
+  if (deleted.filePathname && deleted.filePathname !== deleted.imagePathname) {
+    await deleteReceiptImage(deleted.filePathname);
   }
 }
