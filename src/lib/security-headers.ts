@@ -10,16 +10,22 @@
 const contentSecurityPolicy = [
   "frame-ancestors 'none'",
   "base-uri 'self'",
+  "form-action 'self'",
   "object-src 'none'",
 ].join("; ");
 
 export const securityHeaders = [
   { key: "Content-Security-Policy", value: contentSecurityPolicy },
+  {
+    key: "Strict-Transport-Security",
+    value: "max-age=63072000; includeSubDomains; preload",
+  },
   // Older browsers that ignore CSP `frame-ancestors`.
   { key: "X-Frame-Options", value: "DENY" },
   // Keep `?month=` and other query strings out of third-party referrers.
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "X-DNS-Prefetch-Control", value: "off" },
   // The receipt scanner opens the camera; nothing needs the mic or location.
   {
     key: "Permissions-Policy",
