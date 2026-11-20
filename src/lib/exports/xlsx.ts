@@ -89,6 +89,23 @@ const INVALID_XML =
   // biome-ignore lint/suspicious/noControlCharactersInRegex: this lists the control characters XML allows, to strip the rest.
   /[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/gu;
 
+const DECIMAL = /^-?\d+(\.\d+)?$/;
+const FORMULA_PREFIX = /^[=+\-@|\t\r\n]/;
+
+/**
+ * Defuses strings that spreadsheet tools could interpret as a formula or DDE
+ * command when edited or copied, while leaving plain negative decimals intact.
+ */
+export function safeSpreadsheetText(value: string): string {
+  if (
+    (FORMULA_PREFIX.test(value) || FORMULA_PREFIX.test(value.trimStart())) &&
+    !DECIMAL.test(value)
+  ) {
+    return `'${value}`;
+  }
+  return value;
+}
+
 export function escapeXml(value: string): string {
   return value
     .replace(INVALID_XML, "")
@@ -148,7 +165,7 @@ function cellXml(cell: Cell, ref: string): string {
   if (typeof cell === "string") {
     return cell === ""
       ? ""
-      : `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(cell)}</t></is></c>`;
+      : `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(safeSpreadsheetText(cell))}</t></is></c>`;
   }
   if (typeof cell === "number") {
     return Number.isFinite(cell) ? `<c r="${ref}"><v>${cell}</v></c>` : "";
@@ -182,7 +199,7 @@ function cellXml(cell: Cell, ref: string): string {
       ? `<c r="${ref}"${styleAttr}><v>${value}</v></c>`
       : "";
   }
-  return `<c r="${ref}"${styleAttr} t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`;
+  return `<c r="${ref}"${styleAttr} t="inlineStr"><is><t xml:space="preserve">${escapeXml(safeSpreadsheetText(value))}</t></is></c>`;
 }
 
 function sheetXml(sheet: Sheet, index: number): string {
