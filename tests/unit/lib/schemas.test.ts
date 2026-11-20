@@ -6,6 +6,7 @@ import {
   idSchema,
   incomeSchema,
   monthSchema,
+  receiptFieldsSchema,
 } from "@/lib/schemas";
 
 const errorsOf = (result: {
@@ -156,6 +157,32 @@ describe("expenseSchema", () => {
     const result = expenseSchema.safeParse({ ...valid, description: " " });
     expect(errorsOf(result)).toEqual({
       description: ["Description is required"],
+    });
+  });
+
+  it("rejects impossible calendar dates and amounts over $1,000,000", () => {
+    const badDate = expenseSchema.safeParse({
+      ...valid,
+      spentOn: "2026-02-31",
+    });
+    expect(errorsOf(badDate)).toEqual({ spentOn: ["Pick a date"] });
+
+    const tooLarge = expenseSchema.safeParse({
+      ...valid,
+      amount: "1,000,000.01",
+    });
+    expect(errorsOf(tooLarge)).toEqual({
+      amount: ["That amount is too large"],
+    });
+
+    expect(
+      receiptFieldsSchema.parse({
+        receiptPurchasedOn: "2026-02-31",
+        receiptTotal: "99999999999",
+      }),
+    ).toMatchObject({
+      receiptPurchasedOn: null,
+      receiptTotal: null,
     });
   });
 });

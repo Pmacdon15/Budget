@@ -217,6 +217,10 @@ describe("accountSchema", () => {
     expect(accountSchema.safeParse({ ...base, balance: "lots" }).success).toBe(
       false,
     );
+    expect(
+      accountSchema.safeParse({ ...base, paymentDueDate: "2026-02-31" })
+        .success,
+    ).toBe(false);
   });
 });
 
@@ -246,5 +250,19 @@ describe("transferSchema", () => {
     expect(
       transferSchema.safeParse({ ...t, toAccountId: b, amount: "0" }).success,
     ).toBe(false);
+    expect(
+      transferSchema.safeParse({
+        ...t,
+        toAccountId: b,
+        transferredOn: "2026-02-31",
+      }).success,
+    ).toBe(false);
+    expect(
+      transferSchema.safeParse({
+        ...t,
+        toAccountId: b,
+        amount: "1000000000001",
+      }).error?.issues[0]?.message,
+    ).toBe("That amount is too large");
   });
 });
