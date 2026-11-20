@@ -104,9 +104,13 @@ export async function insertRecurringDeposit(
       insert into income (user_id, month, label, amount_cents, received_on, recurring_id)
       select ${userId}, ${values.month}, ${item.label}, ${values.amountCents},
              ${values.receivedOn}, ${item.id}
-      where not exists (
+      where exists (
+        select 1 from recurring_income r
+        where r.id = ${item.id} and r.user_id = ${userId}
+      )
+      and not exists (
         select 1 from income
-        where recurring_id = ${item.id} and month = ${values.month}
+        where user_id = ${userId} and recurring_id = ${item.id} and month = ${values.month}
       )
       returning id
     `,
