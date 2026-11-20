@@ -13,6 +13,8 @@ import type { CategoryTotal } from "@/lib/types";
 /** The form field for one category's limit, e.g. `limit_Groceries`. */
 export const limitField = (category: Category) => `limit_${category}` as const;
 
+const MAX_LIMIT_CENTS = 100_000_000;
+
 const optionalLimit = z
   .string()
   .optional()
@@ -24,6 +26,13 @@ const optionalLimit = z
       ctx.addIssue({
         code: "custom",
         message: "Enter a valid amount, like 300.00",
+      });
+      return z.NEVER;
+    }
+    if (cents > MAX_LIMIT_CENTS) {
+      ctx.addIssue({
+        code: "custom",
+        message: "That amount is too large",
       });
       return z.NEVER;
     }

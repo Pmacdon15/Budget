@@ -297,16 +297,20 @@ const optionalMoney = (signed: boolean) =>
       return cents;
     });
 
+const isCalendarDate = (value: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return (
+    !Number.isNaN(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value
+  );
+};
+
 const optionalDate = z
   .string()
   .optional()
   .transform((value) => value?.trim() || null)
-  .pipe(
-    z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date")
-      .nullable(),
-  );
+  .pipe(z.string().refine(isCalendarDate, "Pick a date").nullable());
 
 const optionalText = (max: number, message: string) =>
   z
@@ -364,9 +368,16 @@ export const transferSchema = z
         });
         return z.NEVER;
       }
+      if (cents > LIMIT_CENTS) {
+        ctx.addIssue({
+          code: "custom",
+          message: "That amount is too large",
+        });
+        return z.NEVER;
+      }
       return cents;
     }),
-    transferredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date"),
+    transferredOn: z.string().refine(isCalendarDate, "Pick a date"),
     description: optionalText(120, "Description is too long"),
   })
   .refine((t) => t.fromAccountId !== t.toAccountId, {

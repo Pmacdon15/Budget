@@ -51,13 +51,15 @@ describe("categoryBudgetsSchema", () => {
       month: "2026-10",
       limit_Groceries: "lots",
       limit_Dining: "-5",
+      limit_Alcohol: "1,000,000.01",
     });
     expect(result.success).toBe(false);
     const paths = result.error?.issues.map((i) => i.path.join("."));
-    expect(paths).toEqual(["limit_Groceries", "limit_Dining"]);
+    expect(paths).toEqual(["limit_Groceries", "limit_Dining", "limit_Alcohol"]);
     expect(result.error?.issues[0]?.message).toBe(
       "Enter a valid amount, like 300.00",
     );
+    expect(result.error?.issues[2]?.message).toBe("That amount is too large");
   });
 
   it("needs a valid month", () => {

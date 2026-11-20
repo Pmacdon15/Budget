@@ -49,6 +49,20 @@ describe("savingsGoalSchema", () => {
       "target",
     ]);
   });
+
+  it("rejects targets over $1,000,000 and impossible dates", () => {
+    const result = savingsGoalSchema.safeParse({
+      name: "Trip",
+      target: "1000000.01",
+      targetDate: "2026-02-31",
+      month: "2026-01",
+    });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((i) => [i.path[0], i.message])).toEqual([
+      ["target", "That amount is too large"],
+      ["targetDate", "Pick a date"],
+    ]);
+  });
 });
 
 describe("contributionSchema", () => {

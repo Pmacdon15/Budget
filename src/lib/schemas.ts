@@ -12,12 +12,31 @@ import { isMonth } from "@/lib/month";
  * fast feedback — the server never trusts it.
  */
 
+/** Upper bound for one dollar amount in integer cents ($1,000,000.00). */
+const MAX_MONEY_CENTS = 100_000_000;
+
+const isCalendarDate = (value: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return (
+    !Number.isNaN(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value
+  );
+};
+
 const money = z.string().transform((value, ctx) => {
   const cents = parseMoney(value);
   if (cents === null) {
     ctx.addIssue({
       code: "custom",
       message: "Enter a valid amount, like 1250.00",
+    });
+    return z.NEVER;
+  }
+  if (cents > MAX_MONEY_CENTS) {
+    ctx.addIssue({
+      code: "custom",
+      message: "That amount is too large",
     });
     return z.NEVER;
   }
@@ -31,7 +50,7 @@ const text = (label: string) =>
     .min(1, `${label} is required`)
     .max(120, `${label} is too long`);
 
-const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date");
+const date = z.string().refine(isCalendarDate, "Pick a date");
 
 const category = z.enum(CATEGORY_NAMES, { error: "Pick a category" });
 
@@ -120,12 +139,16 @@ const optionalText = (max: number) =>
 const optionalMoney = z
   .string()
   .optional()
-  .transform((v) => (v?.trim() ? parseMoney(v) : null));
+  .transform((v) => {
+    if (!v?.trim()) return null;
+    const cents = parseMoney(v);
+    return cents !== null && cents <= MAX_MONEY_CENTS ? cents : null;
+  });
 
 const optionalDate = z
   .string()
   .optional()
-  .transform((v) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null));
+  .transform((v) => (v && isCalendarDate(v) ? v : null));
 
 export const receiptFieldsSchema = z.object({
   receiptImage: optionalText(200),

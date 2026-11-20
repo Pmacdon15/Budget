@@ -216,6 +216,16 @@ describe("rolloverSchema", () => {
       path: ["carry_Dining"],
       message: "Enter a valid amount, like 50.00",
     });
+
+    const tooLarge = rolloverSchema.safeParse({
+      ...base,
+      carry_Dining: "1000000.01",
+    });
+    expect(tooLarge.success).toBe(false);
+    expect(tooLarge.error?.issues[0]).toMatchObject({
+      path: ["carry_Dining"],
+      message: "That amount is too large",
+    });
   });
 
   it("rejects a missing start month and unknown categories", () => {
