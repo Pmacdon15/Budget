@@ -10,6 +10,7 @@
 import { get } from "@vercel/blob";
 import { getStatementPdfPathname } from "@/dal/accounts";
 import { UnauthorizedError } from "@/dal/errors";
+import { contentDisposition } from "@/lib/receipt-file-response";
 import { idSchema } from "@/lib/schemas";
 
 /** One answer for every refusal, so a probe can't tell the cases apart. */
@@ -46,9 +47,12 @@ export async function GET(
     headers: {
       "Content-Type": "application/pdf",
       "Content-Length": String(result.blob.size),
-      "Content-Disposition": `attachment; filename="statement-${parsed.data}.pdf"`,
+      "Content-Disposition": contentDisposition(
+        "attachment",
+        `statement-${parsed.data}.pdf`,
+      ),
       // Private bytes: nothing in between may keep a copy.
-      "Cache-Control": "private, no-cache",
+      "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
     },
   });
