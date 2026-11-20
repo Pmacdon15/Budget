@@ -237,7 +237,7 @@ describe("GET /api/statements/[id]/pdf", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toBe("application/pdf");
     expect(response.headers.get("Content-Disposition")).toContain("attachment");
-    expect(response.headers.get("Cache-Control")).toBe("private, no-cache");
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
     expect(vi.mocked(get)).toHaveBeenCalledWith(pathname, {
       access: "private",
     });
