@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { alt as ogAlt, size as ogSize } from "@/app/opengraph-image";
 import { LedgerCard } from "@/components/home/ledger-card";
 import { SiteFooter } from "@/components/home/site-footer";
 import { SiteHeader } from "@/components/home/site-header";
@@ -21,12 +22,45 @@ import {
   SAMPLE_TOTALS,
   shareOfIncome,
 } from "@/lib/sample-month";
+import { SITE_DESCRIPTION, SITE_NAME, siteOrigin } from "@/lib/site";
 import { cn } from "@/lib/utils";
 
+const TITLE = "Budget — know what’s left before the month does";
+// Setting openGraph here replaces the inherited one, so name the share image.
+const SHARE_IMAGE = { url: "/opengraph-image", alt: ogAlt, ...ogSize };
+
 export const metadata: Metadata = {
-  title: { absolute: "Budget — know what’s left before the month does" },
-  description:
-    "Enter your fixed bills once, log take-home as it lands and spending as it happens. Budget does the subtraction and gives you one page at the end of the month.",
+  title: { absolute: TITLE },
+  description: SITE_DESCRIPTION,
+  // Signed-out "/" renders this page; /welcome is the same content.
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    url: "/",
+    siteName: SITE_NAME,
+    locale: "en_CA",
+    title: TITLE,
+    description: SITE_DESCRIPTION,
+    images: [SHARE_IMAGE],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: SITE_DESCRIPTION,
+    images: [SHARE_IMAGE],
+  },
+};
+
+/** schema.org data so search engines can describe Budget as a web app. */
+const JSON_LD = {
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  name: SITE_NAME,
+  url: `${siteOrigin()}/`,
+  description: SITE_DESCRIPTION,
+  applicationCategory: "FinanceApplication",
+  operatingSystem: "Web",
+  inLanguage: "en-CA",
 };
 
 const landed = SAMPLE_INCOME.filter((i) => i.amountCents !== null).length;
@@ -54,6 +88,13 @@ const NUMBERS = [
 export default function WelcomePage() {
   return (
     <div className="flex min-h-svh flex-col">
+      <script
+        type="application/ld+json"
+        // biome-ignore lint/security/noDangerouslySetInnerHtml: static JSON-LD built above, with "<" escaped.
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(JSON_LD).replace(/</g, "\\u003c"),
+        }}
+      />
       <SiteHeader />
       <main className="flex-1">
         {/* Hero */}
