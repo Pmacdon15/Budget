@@ -13,16 +13,25 @@
  */
 export const MCP_SCOPES = ["profile", "email", "offline_access"] as const;
 
+const CLERK_HOST_PATTERN =
+  /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.[a-z]{2,}$/i;
+
 /** The Clerk Frontend API URL (the OAuth issuer) encoded in a publishable key. */
-export function clerkIssuer(publishableKey: string) {
-  const encoded = publishableKey
-    .replace(/^pk_(test|live)_/, "")
-    .replace(/-/g, "+")
-    .replace(/_/g, "/");
-  const host = atob(encoded.padEnd(Math.ceil(encoded.length / 4) * 4, "="))
-    .replace(/\$$/, "")
-    .trim();
-  return `https://${host}`;
+export function clerkIssuer(publishableKey: string): string | null {
+  if (!/^pk_(test|live)_/.test(publishableKey)) return null;
+  try {
+    const encoded = publishableKey
+      .replace(/^pk_(test|live)_/, "")
+      .replace(/-/g, "+")
+      .replace(/_/g, "/");
+    const host = atob(encoded.padEnd(Math.ceil(encoded.length / 4) * 4, "="))
+      .replace(/\$$/, "")
+      .trim();
+    if (!CLERK_HOST_PATTERN.test(host)) return null;
+    return `https://${host}`;
+  } catch {
+    return null;
+  }
 }
 
 export function configuredIssuer() {

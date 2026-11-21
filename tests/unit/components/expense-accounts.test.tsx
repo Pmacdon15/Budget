@@ -82,12 +82,14 @@ async function fillIn(
 }
 
 describe("Paid from in the expense form", () => {
-  it("isn't shown with one account, and the expense saves without it", async () => {
+  it("starts on the only account (Cash is offered), and the expense saves", async () => {
     haveAccounts([CHEQUING]);
     renderWithQuery(<ExpenseDialog month="2026-10" trigger={trigger} />);
     const { user, dialog } = await openForm();
     await fillIn(user, dialog);
-    expect(within(dialog).queryByLabelText("Paid from")).toBeNull();
+    expect(await within(dialog).findByLabelText("Paid from")).toHaveTextContent(
+      "Chequing",
+    );
     await user.click(
       within(dialog).getByRole("button", { name: "Add expense" }),
     );

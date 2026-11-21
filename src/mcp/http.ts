@@ -67,7 +67,11 @@ export const MCP_CORS_HEADERS: Record<string, string> = {
   "Access-Control-Expose-Headers":
     "WWW-Authenticate, Mcp-Session-Id, Mcp-Protocol-Version",
   "Access-Control-Max-Age": "86400",
+  "Cache-Control": "private, no-store",
+  "X-Content-Type-Options": "nosniff",
 };
+
+const SAFE_REQUESTED_HEADERS = /^[A-Za-z0-9_, -]{1,500}$/;
 
 /** The response with CORS headers added. Auth is a bearer token, never a cookie, so any origin may call. */
 export function withCors(response: Response) {
@@ -85,8 +89,8 @@ export function withCors(response: Response) {
 /** The CORS preflight answer. Echoes the requested headers, so a client's own extra headers pass too. */
 export function preflight(req: Request) {
   const response = withCors(new Response(null, { status: 204 }));
-  const requested = req.headers.get("access-control-request-headers");
-  if (requested) {
+  const requested = req.headers.get("access-control-request-headers")?.trim();
+  if (requested && SAFE_REQUESTED_HEADERS.test(requested)) {
     response.headers.set("Access-Control-Allow-Headers", requested);
     response.headers.set("Vary", "Access-Control-Request-Headers");
   }

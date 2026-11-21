@@ -69,6 +69,11 @@ describe("proxy (Clerk middleware)", () => {
     "/.well-known/oauth-protected-resource",
     "/.well-known/oauth-protected-resource/api/mcp",
     "/.well-known/oauth-authorization-server",
+    // SEO files and the generated share image.
+    "/robots.txt",
+    "/sitemap.xml",
+    "/opengraph-image",
+    "/opengraph-image-1a2b3c",
   ])("leaves %s public", async (path) => {
     const { protect } = await visit(path);
     expect(protect).not.toHaveBeenCalled();
