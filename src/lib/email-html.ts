@@ -10,9 +10,9 @@ import sanitizeHtml from "sanitize-html";
  */
 
 const BLOCKED_STYLE =
-  /url\s*\(|expression\s*\(|@import|behavior\s*:|-moz-binding|javascript:/i;
+  /\\|\/\*|url\s*\(|image-set\s*\(|src\s*\(|expression\s*\(|@import|behavior\s*:|-moz-binding|javascript:|position\s*:\s*(fixed|sticky)/i;
 
-/** Drops CSS declarations that could load something or run script. */
+/** Drops CSS declarations that could load something, run script, or overlay the header. */
 export function safeStyle(style: string): string {
   return style
     .split(";")

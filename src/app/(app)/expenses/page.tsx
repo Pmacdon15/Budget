@@ -41,6 +41,7 @@ import {
 import { SEARCH_RESULT_LIMIT, searchExpenses } from "@/dal/expense-search";
 import { getMonthOverview } from "@/dal/overview";
 import { categoryColor, categoryLabel } from "@/lib/categories";
+import { CASH_LABEL, isCash } from "@/lib/expense-accounts";
 import { formatMoney } from "@/lib/money";
 import { monthLabel } from "@/lib/month";
 import type { ReceiptKind } from "@/lib/receipt-files";
@@ -217,6 +218,9 @@ async function Expenses({
                           </span>
                           {expense.unpaid ? (
                             <Badge variant="outline">Not paid yet</Badge>
+                          ) : null}
+                          {isCash(expense.accountId) ? (
+                            <Badge variant="outline">{CASH_LABEL}</Badge>
                           ) : null}
                           {expense.receiptId ? (
                             <ReceiptLinks

@@ -27,8 +27,8 @@ import { cn } from "@/lib/utils";
 const ALL = "all";
 
 const SCOPES = [
-  { value: "month", label: "This month" },
   { value: "all", label: "All months" },
+  { value: "month", label: "This month" },
 ] as const;
 
 /**
@@ -159,14 +159,14 @@ export function ExpenseSearchForm({
 
       <Select
         name="scope"
-        defaultValue={search.allMonths ? "all" : "month"}
+        defaultValue={search.scope === "month" ? "month" : "all"}
         disabled={disabled}
-        onValueChange={(value) => go({ scope: String(value ?? "month") })}
+        onValueChange={(value) => go({ scope: String(value ?? "all") })}
       >
         <SelectTrigger aria-label="Months to search" className="w-32">
           <SelectValue>
             {(value: string | null) =>
-              SCOPES.find((s) => s.value === value)?.label ?? "This month"
+              SCOPES.find((s) => s.value === value)?.label ?? "All months"
             }
           </SelectValue>
         </SelectTrigger>

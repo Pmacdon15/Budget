@@ -12,6 +12,10 @@ const isPublicRoute = createRouteMatcher([
   "/api/mcp",
   // OAuth discovery documents for MCP clients. Public by definition.
   "/.well-known/(.*)",
+  // SEO: crawlers and link previews must reach these without signing in.
+  "/robots.txt",
+  "/sitemap.xml",
+  "/opengraph-image(.*)",
 ]);
 const isHome = createRouteMatcher(["/"]);
 
