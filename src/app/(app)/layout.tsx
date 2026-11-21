@@ -1,4 +1,5 @@
 import { UserButton } from "@clerk/nextjs";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { Logo } from "@/components/logo";
@@ -6,6 +7,11 @@ import { MonthSwitcher } from "@/components/month-switcher";
 import { NavLinks, StaticNavLinks } from "@/components/nav-links";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Skeleton } from "@/components/ui/skeleton";
+
+// Signed-in pages are private: never index them, even if a crawler gets in.
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (

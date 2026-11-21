@@ -46,10 +46,20 @@ describe("Spending page search", () => {
     expect(text).not.toContain("Costco gas");
   });
 
-  it("narrows the list by text and shows what matched", async () => {
+  it("narrows the list by text and shows what matched regardless of month", async () => {
     await seed();
     const text = await render({ q: "costco" });
     expect(text).toContain("Costco run");
+    expect(text).toContain("Costco gas");
+    expect(text).not.toContain("Pizza");
+    expect(text).toContain("2 matches across all months · $510.00");
+  });
+
+  it("can narrow text search to the viewed month when asked", async () => {
+    await seed();
+    const text = await render({ q: "costco", scope: "month" });
+    expect(text).toContain("Costco run");
+    expect(text).not.toContain("Costco gas");
     expect(text).not.toContain("Pizza");
     expect(text).toContain("1 match in October 2026 · $450.00");
   });
@@ -91,27 +101,28 @@ describe("Spending page search", () => {
     );
     expect(text).toContain("Search");
     expect(text).toContain("All categories");
-    expect(text).toContain("This month");
+    expect(text).toContain("All months");
   });
 
-  it("renders photo receipt link when found via search", async () => {
+  it("renders photo receipt link when found via search regardless of month", async () => {
     await insertExpenseLines(
       "user_a",
-      { month: "2026-10", spentOn: "2026-10-12", description: "Marks" },
+      { month: "2026-09", spentOn: "2026-09-13", description: "Marks" },
       [{ category: "Professional", amountCents: 4_934 }],
       {
         imagePathname: "receipts/user_a/marks.jpg",
         merchant: "Marks",
-        purchasedOn: "2026-10-12",
+        purchasedOn: "2026-09-13",
         subtotalCents: null,
         taxCents: null,
         totalCents: 4_934,
         rawText: null,
       },
     );
+    // User is viewing November 2026, searching "marks"
     const html = await renderPage(
       ExpensesPage({
-        searchParams: Promise.resolve({ month: MONTH, q: "marks" }),
+        searchParams: Promise.resolve({ month: "2026-11", q: "marks" }),
       }),
     );
     expect(html).toContain("Marks");

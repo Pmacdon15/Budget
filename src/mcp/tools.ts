@@ -45,7 +45,10 @@ import {
 import { isActive } from "@/lib/budget";
 import { CATEGORIES, isCategory } from "@/lib/categories";
 import {
+  CASH,
+  CASH_LABEL,
   expenseAccountLabel,
+  isCash,
   resolveExpenseAccount,
 } from "@/lib/expense-accounts";
 import { currentMonth, monthOfDate, today } from "@/lib/month";
@@ -140,7 +143,7 @@ function needsAccount(
       unknown
         ? "That account_id isn't one of the user's accounts."
         : "The user has more than one account, so Budget needs to know which one this came out of."
-    } Nothing was saved. Their accounts: ${accountNames(accounts)}. Ask the user which one this was paid from, even when the email names a card, and wait for their answer. Then call ${tool} again with that account's account_id.`,
+    } Nothing was saved. Their accounts: ${accountNames(accounts)}. Ask the user which one this was paid from (or whether it was cash), even when the email names a card, and wait for their answer. Then call ${tool} again with that account's account_id, or account_id "${CASH}" for cash.`,
     data: {
       status: unknown ? "unknown_account" : "needs_account",
       accounts: accounts.map(accountOption),
@@ -194,6 +197,7 @@ export async function listExpenses(
   // No account on an expense means the main chequing account.
   const primary = accounts.find((a) => a.isPrimary) ?? null;
   const paidFrom = (accountId: string | null | undefined) => {
+    if (isCash(accountId)) return { account_id: CASH, account: CASH_LABEL };
     const account = accountId
       ? accounts.find((a) => a.id === accountId)
       : primary;
@@ -335,9 +339,11 @@ async function addExpenseFor(
         : input.is_subscription,
     accountId: choice.accountId,
   });
-  const paidFrom = choice.account
-    ? ` Paid from ${choice.account.name} (${accountTypeLabel(choice.account.type)}).`
-    : "";
+  const paidFrom = isCash(choice.accountId)
+    ? " Paid in cash: it counts as spending but comes off no account balance."
+    : choice.account
+      ? ` Paid from ${choice.account.name} (${accountTypeLabel(choice.account.type)}).`
+      : "";
   const notes = [
     fixedItemId
       ? "It pays a fixed bill: approving marks that month paid, so it isn't counted twice. If the amount differs, the user can choose Replace on the Review page to update the bill."
@@ -355,7 +361,9 @@ async function addExpenseFor(
       status: "pending_review",
       id,
       account_id: choice.accountId,
-      account_name: choice.account?.name ?? null,
+      account_name: isCash(choice.accountId)
+        ? CASH_LABEL
+        : (choice.account?.name ?? null),
       review_url: REVIEW_URL,
       unpaid: input.unpaid ?? false,
       has_receipt: receipt !== null,
@@ -396,8 +404,11 @@ export async function editExpense(
       isError: true,
     };
   }
-  let account: Account | null = null;
-  if (input.account_id) {
+  // Cash is no account, so it's a name only.
+  let account: Pick<Account, "id" | "name"> | null = null;
+  if (isCash(input.account_id)) {
+    account = { id: CASH, name: CASH_LABEL };
+  } else if (input.account_id) {
     const accounts = await selectAccounts(caller.userId);
     account = accounts.find((a) => a.id === input.account_id) ?? null;
     if (!account) return needsAccount(accounts, true, "edit_expense");
@@ -415,7 +426,7 @@ export async function editExpense(
   };
   await updateExpenseRow(caller.userId, input.id, values);
   return {
-    summary: `Updated: ${values.description}, $${(values.amountCents / 100).toFixed(2)} on ${values.spentOn} (${values.category})${account ? `, paid from ${account.name}` : ""}.`,
+    summary: `Updated: ${values.description}, $${(values.amountCents / 100).toFixed(2)} on ${values.spentOn} (${values.category})${account ? (isCash(account.id) ? ", paid in cash" : `, paid from ${account.name}`) : ""}.`,
     data: {
       id: input.id,
       date: values.spentOn,

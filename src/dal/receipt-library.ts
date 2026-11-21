@@ -12,11 +12,12 @@ export const getReceiptLibrary = cache(
   async (search: string, month?: string | null) => {
     const userId = await requireUserId();
     // One extra row tells the page whether the list was cut off.
+    // Searching text finds matches across all months regardless of the selected month.
     const rows = await selectReceiptLibrary(
       userId,
       search,
       RECEIPT_LIBRARY_LIMIT + 1,
-      month,
+      search ? null : month,
     );
     return {
       receipts: rows.slice(0, RECEIPT_LIBRARY_LIMIT),

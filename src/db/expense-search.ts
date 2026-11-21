@@ -30,6 +30,7 @@ export async function selectMatchingExpenses(
   const rows = await db()`
     select e.id, e.month, e.spent_on, e.description, e.category,
            e.amount_cents, e.receipt_id, e.unpaid, e.fixed_item_id, e.account_id,
+           e.paid_cash,
            (select r.image_pathname is not null from receipts r
             where r.id = e.receipt_id) as receipt_has_photo,
            (select r.file_kind from receipts r
