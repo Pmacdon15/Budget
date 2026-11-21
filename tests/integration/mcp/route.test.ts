@@ -4,6 +4,8 @@ import { GET as authServerMetadata } from "@/app/.well-known/oauth-authorization
 import { GET as resourceMetadata } from "@/app/.well-known/oauth-protected-resource/[[...resource]]/route";
 import { GET as openIdConfiguration } from "@/app/.well-known/openid-configuration/[[...path]]/route";
 import { DELETE, GET, OPTIONS, POST } from "@/app/api/mcp/route";
+import { MCP_CORS_HEADERS, preflight } from "@/mcp/http";
+import { clerkIssuer } from "@/mcp/oauth-config";
 import { clerkOAuth, signInAs } from "../../helpers/auth";
 import { rows } from "../../helpers/test-db";
 
@@ -498,5 +500,33 @@ describe("OAuth discovery", () => {
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("timeout"));
     vi.spyOn(console, "error").mockImplementation(() => {});
     expect((await authServerMetadata()).status).toBe(502);
+  });
+
+  it("validates Clerk publishable key decoded host against SSRF and hardens MCP CORS headers", () => {
+    expect(MCP_CORS_HEADERS["Cache-Control"]).toBe("private, no-store");
+    expect(MCP_CORS_HEADERS["X-Content-Type-Options"]).toBe("nosniff");
+
+    const invalid = preflight(
+      new Request(URL_, {
+        method: "OPTIONS",
+        headers: {
+          "access-control-request-headers": "authorization; evil=1",
+        },
+      }),
+    );
+    expect(invalid.headers.get("Access-Control-Allow-Headers")).toBe(
+      MCP_CORS_HEADERS["Access-Control-Allow-Headers"],
+    );
+
+    expect(clerkIssuer(`pk_test_${btoa("clerk.budget.example$")}`)).toBe(
+      "https://clerk.budget.example",
+    );
+    expect(clerkIssuer("not_a_clerk_key")).toBeNull();
+    expect(
+      clerkIssuer(`pk_test_${btoa("169.254.169.254/latest/meta-data$")}`),
+    ).toBeNull();
+    expect(clerkIssuer(`pk_test_${btoa("127.0.0.1$")}`)).toBeNull();
+    expect(clerkIssuer(`pk_test_${btoa("localhost:8080$")}`)).toBeNull();
+    expect(clerkIssuer(`pk_test_${btoa("evil.example/path?x=1#")}`)).toBeNull();
   });
 });
