@@ -74,6 +74,11 @@ describe("sanitizeEmailHtml", () => {
     expect(html).not.toContain("url(");
     expect(html).not.toContain("expression");
     expect(safeStyle("behavior: url(x.htc); margin: 0")).toBe("margin: 0");
+    expect(
+      safeStyle(
+        "background: u\\72l(https://t.example/a.png); background: url/**/(https://t.example/b.png); background-image: image-set('https://t.example/c.png' 1x); position: fixed; position: sticky; color: green",
+      ),
+    ).toBe("color: green");
   });
 
   it("opens links in a new tab without a referrer", () => {

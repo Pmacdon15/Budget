@@ -20,6 +20,31 @@ export type ExpenseAccountOption = Pick<
 
 export const ACCOUNT_REQUIRED_MESSAGE = "Choose the account this came out of";
 
+/**
+ * Paid in cash: from no account, so it counts as spending but never changes
+ * an account balance. Stands in for an account id everywhere an account is
+ * chosen (forms, the DAL, the MCP tools). Only the database layer turns it
+ * into `paid_cash` with an empty account_id (see cashColumns).
+ */
+export const CASH = "cash";
+
+export const CASH_LABEL = "Cash";
+
+export const isCash = (accountId: string | null | undefined) =>
+  accountId === CASH;
+
+/** How an account choice is stored: cash is no account plus the flag. */
+export const cashColumns = (accountId: string | null | undefined) =>
+  isCash(accountId)
+    ? { accountId: null, paidCash: true }
+    : { accountId: accountId ?? null, paidCash: false };
+
+/** How a stored row reads back: the cash flag becomes CASH. */
+export const accountIdFromRow = (
+  accountId: string | null | undefined,
+  paidCash: unknown,
+): string | null => (paidCash ? CASH : (accountId ?? null));
+
 export const UNKNOWN_ACCOUNT_MESSAGE =
   "That account no longer exists. Choose another.";
 
@@ -36,8 +61,15 @@ export const needsAccountChoice = (accounts: readonly unknown[]) =>
   accounts.length > 1;
 
 /**
- * The `accountId` form field: empty means "not chosen" (null), anything else
- * must look like an account id. Whether it's required depends on how many
+ * Whether the form shows "Paid from" at all: with any account, so cash can be
+ * picked instead. With no accounts there's no balance for cash to stay off.
+ */
+export const offersAccountChoice = (accounts: readonly unknown[]) =>
+  accounts.length > 0;
+
+/**
+ * The `accountId` form field: empty means "not chosen" (null), CASH means
+ * paid in cash, anything else must look like an account id. Whether it's required depends on how many
  * accounts the user has, which the server checks (see resolveExpenseAccount)
  * and the form checks with `requireAccount`.
  */
@@ -45,7 +77,11 @@ export const accountIdField = z
   .string()
   .optional()
   .transform((value) => value?.trim() || null)
-  .pipe(z.uuid({ error: ACCOUNT_REQUIRED_MESSAGE }).nullable());
+  .pipe(
+    z
+      .union([z.literal(CASH), z.uuid()], { error: ACCOUNT_REQUIRED_MESSAGE })
+      .nullable(),
+  );
 
 /** Adds "an account must be chosen" to a form schema, for a user with several accounts. */
 export function requireAccount<T extends z.ZodType<{ accountId?: unknown }>>(
@@ -63,7 +99,10 @@ export function requireAccount<T extends z.ZodType<{ accountId?: unknown }>>(
 }
 
 export type AccountChoice<T> =
-  /** Use this account (null only when the user has no accounts at all). */
+  /**
+   * Use this account: null only when the user has no accounts at all, CASH
+   * (with no `account`) when it was paid in cash.
+   */
   | { kind: "ok"; accountId: string | null; account: T | null }
   /** Several accounts and none was named: ask the user which. */
   | { kind: "choose"; accounts: T[] }
@@ -71,14 +110,17 @@ export type AccountChoice<T> =
   | { kind: "unknown"; accounts: T[] };
 
 /**
- * Which account an expense comes out of. A named account must be one of the
- * user's. With none named: no accounts at all is the old bank balance
+ * Which account an expense comes out of. CASH is always fine: it's no account.
+ * A named account must be one of the user's. With none named: no accounts at all is the old bank balance
  * behaviour (null), a single account is that one, and several means asking.
  */
 export function resolveExpenseAccount<T extends { id: string }>(
   accounts: T[],
   requested: string | null | undefined,
 ): AccountChoice<T> {
+  if (isCash(requested)) {
+    return { kind: "ok", accountId: CASH, account: null };
+  }
   if (requested) {
     const account = accounts.find((a) => a.id === requested);
     return account

@@ -10,17 +10,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  CASH,
+  CASH_LABEL,
   type ExpenseAccountOption,
   expenseAccountLabel,
+  isCash,
   needsAccountChoice,
+  offersAccountChoice,
 } from "@/lib/expense-accounts";
 
 /**
- * "Paid from": which account an expense came out of. Shown only when the user
- * has more than one account; with one there's nothing to confirm. A new
- * expense starts with nothing picked, so the account is always a choice the
- * user made, never a guess. The error line is always there, so a refusal from
- * the server still shows even if the picker couldn't load.
+ * "Paid from": which account an expense came out of, or Cash. Shown whenever
+ * the user has an account, so cash can be picked: cash counts as spending but
+ * comes off no balance. With several accounts a new expense starts with
+ * nothing picked, so the account is always a choice the user made, never a
+ * guess; with one, it starts on that account. The error line is always
+ * there, so a refusal from the server still shows even if the picker
+ * couldn't load.
  */
 export function ExpenseAccountField({
   id,
@@ -29,25 +35,38 @@ export function ExpenseAccountField({
 }: {
   id: string;
   accounts: ExpenseAccountOption[];
-  /** The account already set (editing), or nothing for a new expense. */
+  /** The account already set (editing, or CASH), or nothing for a new expense. */
   defaultValue?: string | null;
 }) {
-  if (!needsAccountChoice(accounts)) return <FieldError name="accountId" />;
+  if (!offersAccountChoice(accounts)) return <FieldError name="accountId" />;
 
   const label = (value: string | null) => {
+    if (isCash(value)) return CASH_LABEL;
     const account = accounts.find((a) => a.id === value);
     // Nothing picked yet shows the prompt (a render function replaces the placeholder).
     return account ? expenseAccountLabel(account) : "Choose an account";
   };
-  const known = accounts.some((a) => a.id === defaultValue);
+  const several = needsAccountChoice(accounts);
+  const known =
+    isCash(defaultValue) || accounts.some((a) => a.id === defaultValue);
+  // With one account there's nothing to confirm: it starts on that one.
+  const initial = known
+    ? (defaultValue ?? null)
+    : several
+      ? null
+      : (accounts[0]?.id ?? null);
 
   return (
     <Field
       label="Paid from"
       htmlFor={id}
-      hint="You have more than one account, so confirm which one this came out of."
+      hint={
+        several
+          ? "You have more than one account, so confirm which one this came out of. Cash comes off no account."
+          : "Cash counts as spending but comes off no account."
+      }
     >
-      <Select name="accountId" defaultValue={known ? defaultValue : null}>
+      <Select name="accountId" defaultValue={initial}>
         <SelectTrigger id={id} className="w-full">
           <SelectValue>{label}</SelectValue>
         </SelectTrigger>
@@ -57,6 +76,7 @@ export function ExpenseAccountField({
               {expenseAccountLabel(a)}
             </SelectItem>
           ))}
+          <SelectItem value={CASH}>{CASH_LABEL}</SelectItem>
         </SelectContent>
       </Select>
       <FieldError name="accountId" />

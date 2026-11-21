@@ -11,14 +11,26 @@ const toIso = (value: unknown) =>
       ? value.toISOString()
       : new Date(String(value)).toISOString();
 
+export const MAX_API_KEYS = 25;
+
+/**
+ * Inserts a new API key if the user has fewer than `MAX_API_KEYS` active keys.
+ * Returns false when the limit is already reached.
+ */
 export async function insertApiKey(
   userId: string,
   values: { name: string; keyHash: string; keyPrefix: string },
-) {
-  await db()`
+): Promise<boolean> {
+  const rows = await db()`
     insert into api_keys (user_id, name, key_hash, key_prefix)
-    values (${userId}, ${values.name}, ${values.keyHash}, ${values.keyPrefix})
+    select ${userId}, ${values.name}, ${values.keyHash}, ${values.keyPrefix}
+    where (
+      select count(*) from api_keys
+      where user_id = ${userId} and revoked_at is null
+    ) < ${MAX_API_KEYS}
+    returning id
   `;
+  return rows.length > 0;
 }
 
 /** This user's keys that still work, newest first. */

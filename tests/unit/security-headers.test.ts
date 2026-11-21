@@ -21,10 +21,19 @@ describe("security headers", () => {
     expect(headers.get("X-Frame-Options")).toBe("DENY");
   });
 
-  it("blocks base-tag hijacking and plugin content", async () => {
+  it("blocks base-tag hijacking, form hijacking, and plugin content", async () => {
     const csp = (await configuredHeaders()).get("Content-Security-Policy");
     expect(csp).toContain("base-uri 'self'");
+    expect(csp).toContain("form-action 'self'");
     expect(csp).toContain("object-src 'none'");
+  });
+
+  it("enforces HTTPS with HSTS and disables DNS prefetching", async () => {
+    const headers = await configuredHeaders();
+    expect(headers.get("Strict-Transport-Security")).toBe(
+      "max-age=63072000; includeSubDomains; preload",
+    );
+    expect(headers.get("X-DNS-Prefetch-Control")).toBe("off");
   });
 
   it("keeps query strings out of cross-origin referrers", async () => {
