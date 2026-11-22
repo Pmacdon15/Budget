@@ -1,5 +1,5 @@
 import "server-only";
-import { db } from "@/db/client";
+import { db, type Row } from "@/db/client";
 import type { ApiKey } from "@/lib/api-keys";
 
 /** Raw SQL for personal API keys. Callers handle auth. Keys are stored hashed. */
@@ -16,21 +16,37 @@ export const MAX_API_KEYS = 25;
 /**
  * Inserts a new API key if the user has fewer than `MAX_API_KEYS` active keys.
  * Returns false when the limit is already reached.
+ *
+ * The count and the insert must not race: under READ COMMITTED, two requests
+ * that each count 24 keys would both insert. So both run in one transaction
+ * that first takes a per-user advisory lock (released at commit). A second
+ * request waits on the lock, and because each statement in a READ COMMITTED
+ * transaction takes a fresh snapshot, its insert then counts the key the first
+ * one committed. The lock is a separate statement, not a CTE, so it is
+ * certainly held before the count runs.
  */
 export async function insertApiKey(
   userId: string,
   values: { name: string; keyHash: string; keyPrefix: string },
 ): Promise<boolean> {
-  const rows = await db()`
-    insert into api_keys (user_id, name, key_hash, key_prefix)
-    select ${userId}, ${values.name}, ${values.keyHash}, ${values.keyPrefix}
-    where (
-      select count(*) from api_keys
-      where user_id = ${userId} and revoked_at is null
-    ) < ${MAX_API_KEYS}
-    returning id
-  `;
-  return rows.length > 0;
+  const [, rows] = await db().transaction(
+    (sql) => [
+      sql`select pg_advisory_xact_lock(hashtext('api_keys'), hashtext(${userId}))`,
+      sql`
+        insert into api_keys (user_id, name, key_hash, key_prefix)
+        select ${userId}, ${values.name}, ${values.keyHash}, ${values.keyPrefix}
+        where (
+          select count(*) from api_keys
+          where user_id = ${userId} and revoked_at is null
+        ) < ${MAX_API_KEYS}
+        returning id
+      `,
+    ],
+    // Must stay READ COMMITTED: a REPEATABLE READ snapshot would be taken at
+    // the lock and miss keys committed while this request waited for it.
+    { isolationLevel: "ReadCommitted" },
+  );
+  return (rows as Row[]).length > 0;
 }
 
 /** This user's keys that still work, newest first. */
