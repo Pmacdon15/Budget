@@ -11,15 +11,27 @@ export function signOut() {
 
 /**
  * The mocked Clerk OAuth token check. Tokens in `tokens` are accepted for
- * their user; anything else is rejected the way Clerk rejects it. `requests`
- * keeps what was asked, so tests can check how the token was passed on.
+ * their user; anything else is rejected the way Clerk rejects it. JWTs go
+ * through `authenticateRequest` (kept in `requests`, so tests can check how
+ * the token was passed on), opaque `oat_` tokens through the Backend API's
+ * `idPOAuthAccessToken.verify`. `seen` has every token handed to Clerk.
  */
+type MockOAuthToken = {
+  userId: string;
+  clientId: string;
+  /** The token's audience, as Clerk's Backend API reports it. */
+  aud?: string[];
+  revoked?: boolean;
+};
+
 export const clerkOAuth = {
-  tokens: new Map<string, { userId: string; clientId: string }>(),
+  tokens: new Map<string, MockOAuthToken>(),
   requests: [] as Request[],
+  seen: [] as string[],
   authenticate(request: Request) {
     clerkOAuth.requests.push(request);
     const token = request.headers.get("authorization")?.replace(/^Bearer /, "");
+    if (token) clerkOAuth.seen.push(token);
     const known = token ? clerkOAuth.tokens.get(token) : undefined;
     return {
       reason: known ? null : "token-invalid",
@@ -36,9 +48,31 @@ export const clerkOAuth = {
           : { isAuthenticated: false, tokenType: "oauth_token" },
     };
   },
+  verify(token: string) {
+    clerkOAuth.seen.push(token);
+    const known = clerkOAuth.tokens.get(token);
+    if (!known) {
+      throw Object.assign(new Error("OAuth token not found"), { status: 404 });
+    }
+    return {
+      id: "oat_id",
+      clientId: known.clientId,
+      type: "oauth_token",
+      subject: known.userId,
+      scopes: ["profile", "email"],
+      revoked: known.revoked ?? false,
+      revocationReason: null,
+      expired: false,
+      expiration: null,
+      createdAt: 0,
+      updatedAt: 0,
+      aud: known.aud,
+    };
+  },
   reset() {
     clerkOAuth.tokens.clear();
     clerkOAuth.requests = [];
+    clerkOAuth.seen = [];
   },
 };
 
