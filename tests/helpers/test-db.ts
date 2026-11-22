@@ -63,6 +63,8 @@ export function neonLikeSql() {
       build: (
         tx: (strings: TemplateStringsArray, ...values: unknown[]) => Query,
       ) => Query[],
+      // Neon's isolation options; PGlite runs READ COMMITTED, Neon's default too.
+      _options?: { isolationLevel?: string },
     ) =>
       testPg().transaction(async (tx) => {
         const results: Row[][] = [];
