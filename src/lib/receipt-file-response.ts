@@ -110,7 +110,7 @@ export async function receiptFileResponse(
       filename,
     ),
     // Private bytes: nothing in between may keep a copy.
-    "Cache-Control": "private, no-cache",
+    "Cache-Control": "private, no-store",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
   };
