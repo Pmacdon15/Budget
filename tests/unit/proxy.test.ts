@@ -50,6 +50,7 @@ describe("proxy (Clerk middleware)", () => {
     "/review",
     // Only the MCP endpoint itself checks its own token.
     "/api/mcp-other",
+    "/api/csp-report/other",
   ])("requires sign-in for %s", async (path) => {
     const { protect } = await visit(path);
     expect(protect).toHaveBeenCalledOnce();
@@ -69,6 +70,8 @@ describe("proxy (Clerk middleware)", () => {
     "/.well-known/oauth-protected-resource",
     "/.well-known/oauth-protected-resource/api/mcp",
     "/.well-known/oauth-authorization-server",
+    // CSP violation reports, sent by browsers without cookies.
+    "/api/csp-report",
     // SEO files and the generated share image.
     "/robots.txt",
     "/sitemap.xml",
