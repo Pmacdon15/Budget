@@ -12,6 +12,8 @@ const isPublicRoute = createRouteMatcher([
   "/api/mcp",
   // OAuth discovery documents for MCP clients. Public by definition.
   "/.well-known/(.*)",
+  // CSP violation reports: browsers send them without cookies.
+  "/api/csp-report",
   // SEO: crawlers and link previews must reach these without signing in.
   "/robots.txt",
   "/sitemap.xml",
