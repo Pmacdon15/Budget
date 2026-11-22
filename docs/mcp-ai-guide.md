@@ -23,6 +23,12 @@ Claude, ChatGPT and Gemini register themselves with Budget's sign-in (Clerk) aut
 
 The app then signs you in to Budget like any other. If it can't do OAuth at all, use an API key as above.
 
+### Which sign-ins Budget accepts
+
+Budget accepts an access token from Clerk only when it was issued for Budget's MCP server: if the token names the resource it's for (its `aud`), that must be `https://budget.patmac.ca/api/mcp` (or on a preview, that preview's `/api/mcp`). A token another app got from the same Clerk instance for its own API is refused.
+
+To go further and accept only some apps, set `MCP_OAUTH_CLIENT_IDS` to a comma-separated list of Clerk OAuth client IDs. Leave it unset if you connect Claude, ChatGPT or Gemini by URL: they register themselves and get a new client ID each time, so a fixed list would lock them out. Refused tokens are logged (client ID and audience, never the token).
+
 ### Gemini
 
 Gemini's custom apps (gemini.google.com and the Gemini phone app, with a personal Google account) connect with just the URL:

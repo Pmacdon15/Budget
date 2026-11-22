@@ -18,6 +18,9 @@ vi.mock("@clerk/nextjs/server", async () => {
       authenticateRequest: vi.fn(async (request: Request) =>
         clerkOAuth.authenticate(request),
       ),
+      idPOAuthAccessToken: {
+        verify: vi.fn(async (token: string) => clerkOAuth.verify(token)),
+      },
     })),
   };
 });

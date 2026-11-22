@@ -219,9 +219,81 @@ describe("MCP endpoint auth", () => {
     expect(await rows("select user_id from pending_expenses")).toEqual([
       { user_id: "user_gemini" },
     ]);
-    expect(clerkOAuth.requests.at(-1)?.headers.get("authorization")).toBe(
-      `Bearer ${token}`,
-    );
+    expect(clerkOAuth.seen.at(-1)).toBe(token);
+  });
+
+  it.each([
+    ["the MCP server's resource URL", [URL_]],
+    ["the resource URL with a trailing slash", [`${URL_}/`]],
+    ["Budget's origin", ["https://budget.patmac.ca"]],
+    ["only its own client id", ["client_dcr_123"]],
+    ["another audience next to this one", ["https://other.example", URL_]],
+  ])("accepts an opaque token whose audience is %s", async (_kind, aud) => {
+    clerkOAuth.tokens.set("oat_aud", {
+      userId: "user_oauth",
+      clientId: "client_dcr_123",
+      aud,
+    });
+    expect((await initialize("oat_aud")).status).toBe(200);
+  });
+
+  it("refuses an opaque token issued for another resource of the same Clerk instance", async () => {
+    clerkOAuth.tokens.set("oat_other_app", {
+      userId: "user_oauth",
+      clientId: "client_other_app",
+      aud: ["https://other-app.example/api"],
+    });
+    const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const res = await initialize("oat_other_app");
+    expect(res.status).toBe(401);
+    expect(res.challenge).toContain('error="invalid_token"');
+    const logged = spy.mock.calls.flat().join("\n");
+    expect(logged).toContain("https://other-app.example/api");
+    expect(logged).not.toContain("oat_other_app");
+  });
+
+  it("checks a JWT access token's aud claim after Clerk verifies it", async () => {
+    const jwt = (aud: unknown) =>
+      [
+        Buffer.from('{"alg":"RS256","typ":"at+jwt"}').toString("base64url"),
+        Buffer.from(JSON.stringify({ sub: "user_oauth", aud })).toString(
+          "base64url",
+        ),
+        "signature",
+      ].join(".");
+    const mine = jwt(URL_);
+    const theirs = jwt(["https://other-app.example"]);
+    clerkOAuth.tokens.set(mine, { userId: "user_oauth", clientId: "c1" });
+    clerkOAuth.tokens.set(theirs, { userId: "user_oauth", clientId: "c1" });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect((await initialize(mine)).status).toBe(200);
+    expect((await initialize(theirs)).status).toBe(401);
+  });
+
+  it("refuses a token Clerk reports as revoked", async () => {
+    clerkOAuth.tokens.set("oat_revoked", {
+      userId: "user_oauth",
+      clientId: "client_dcr_123",
+      revoked: true,
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect((await initialize("oat_revoked")).status).toBe(401);
+  });
+
+  it("only accepts the clients in MCP_OAUTH_CLIENT_IDS when it's set", async () => {
+    vi.stubEnv("MCP_OAUTH_CLIENT_IDS", "client_claude, client_chatgpt");
+    clerkOAuth.tokens.set("oat_listed", {
+      userId: "user_oauth",
+      clientId: "client_chatgpt",
+    });
+    clerkOAuth.tokens.set("oat_unlisted", {
+      userId: "user_oauth",
+      clientId: "client_other_app",
+    });
+    const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect((await initialize("oat_listed")).status).toBe(200);
+    expect((await initialize("oat_unlisted")).status).toBe(401);
+    expect(spy.mock.calls.flat().join("\n")).toContain("client_other_app");
   });
 
   it("rejects an OAuth token Clerk doesn't accept", async () => {
