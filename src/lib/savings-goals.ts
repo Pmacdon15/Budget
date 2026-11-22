@@ -8,12 +8,27 @@ import { idSchema, incomeSchema, monthSchema } from "@/lib/schemas";
  * totals already treat it as money set aside. Shared by browser and server.
  */
 
-const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date");
+const MAX_TARGET_CENTS = 100_000_000;
+
+const isCalendarDate = (value: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return (
+    !Number.isNaN(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value
+  );
+};
+
+const date = z.string().refine(isCalendarDate, "Pick a date");
 
 const target = z.string().transform((value, ctx) => {
   const cents = parseMoney(value);
   if (cents === null || cents <= 0) {
     ctx.addIssue({ code: "custom", message: "Enter a target, like 5000.00" });
+    return z.NEVER;
+  }
+  if (cents > MAX_TARGET_CENTS) {
+    ctx.addIssue({ code: "custom", message: "That amount is too large" });
     return z.NEVER;
   }
   return cents;

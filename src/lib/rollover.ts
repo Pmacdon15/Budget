@@ -33,6 +33,8 @@ export const includeField = (category: Category) =>
   `rollover_${category}` as const;
 export const carryField = (category: Category) => `carry_${category}` as const;
 
+const MAX_ROLLOVER_CENTS = 100_000_000;
+
 const optionalAmount = z
   .string()
   .optional()
@@ -44,6 +46,13 @@ const optionalAmount = z
       ctx.addIssue({
         code: "custom",
         message: "Enter a valid amount, like 50.00",
+      });
+      return z.NEVER;
+    }
+    if (cents > MAX_ROLLOVER_CENTS) {
+      ctx.addIssue({
+        code: "custom",
+        message: "That amount is too large",
       });
       return z.NEVER;
     }
