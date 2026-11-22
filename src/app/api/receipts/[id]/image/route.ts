@@ -49,7 +49,7 @@ export async function GET(
       "Content-Type": IMAGE_CONTENT_TYPE,
       "Content-Length": String(bytes.length),
       // Private bytes: nothing in between may keep a copy.
-      "Cache-Control": "private, no-cache",
+      "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
     },
   });
