@@ -86,7 +86,7 @@ describe("GET /api/receipts/[id]/file", () => {
     expect(response.headers.get("Content-Disposition")).toContain(
       'inline; filename="Rogers Oct.pdf"',
     );
-    expect(response.headers.get("Cache-Control")).toBe("private, no-cache");
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
     expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(PDF);
     expect(get).toHaveBeenCalledWith(PDF_PATH, { access: "private" });

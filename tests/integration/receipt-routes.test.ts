@@ -257,7 +257,7 @@ describe("GET /api/receipts/[id]/image", () => {
     const response = await fetchImage(id);
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toBe("image/jpeg");
-    expect(response.headers.get("Cache-Control")).toBe("private, no-cache");
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(JPEG);
     expect(get).toHaveBeenCalledWith(photo, { access: "private" });
   });
