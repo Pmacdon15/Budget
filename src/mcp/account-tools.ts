@@ -1,5 +1,6 @@
 import "server-only";
 import { buildMonthOverview } from "@/dal/overview";
+import { claimBlobUpload } from "@/dal/receipt-upload-limits";
 import {
   applyStatementDetails,
   type BalanceAsOf,
@@ -34,6 +35,7 @@ import {
 } from "@/lib/accounts";
 import { currentMonth, today } from "@/lib/month";
 import { toCents } from "@/lib/pending-expenses";
+import { uploadLimitToolMessage } from "@/lib/receipt-upload-limit";
 import {
   isPdf,
   MAX_PDF_BYTES,
@@ -114,7 +116,16 @@ function decodePdf(base64: string | undefined): Uint8Array | null {
   return bytes;
 }
 
+/**
+ * Stores a statement PDF, after claiming it against the user's daily upload
+ * budget. A refusal is a tool error thrown before anything is stored or
+ * recorded, so the call saves nothing.
+ */
 async function storePdf(userId: string, bytes: Uint8Array) {
+  const claim = await claimBlobUpload(userId, bytes.length);
+  if (!claim.allowed) {
+    throw new ToolInputError(uploadLimitToolMessage(claim.retryAfterSeconds));
+  }
   const pathname = newStatementPdfPathname(userId);
   await putStatementPdf(
     pathname,
