@@ -10,6 +10,7 @@ import {
 } from "@/actions/recurring-income";
 import { getMonthOverview } from "@/dal/overview";
 import { getRecurringIncomeForMonth } from "@/dal/recurring-income";
+import { insertRecurringDeposit } from "@/db/recurring-income";
 import { signInAs, signOut } from "../../helpers/auth";
 import { rows } from "../../helpers/test-db";
 
@@ -185,6 +186,16 @@ describe("repeating take-home", () => {
     expect(await getRecurringIncomeForMonth("2026-03")).toMatchObject([
       { label: "Paycheque", status: { state: "expected" } },
     ]);
+    expect(await rows("select * from income")).toEqual([]);
+
+    // Even at the DB layer, user_b cannot link a deposit to user_a's recurring_id.
+    expect(
+      await insertRecurringDeposit("user_b", pay, {
+        month: "2026-03",
+        amountCents: 250_000,
+        receivedOn: null,
+      }),
+    ).toBe(false);
     expect(await rows("select * from income")).toEqual([]);
   });
 
