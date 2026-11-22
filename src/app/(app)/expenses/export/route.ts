@@ -23,7 +23,11 @@ export async function GET(request: Request) {
   if (!parsed.success) {
     return new Response(parsed.error.issues[0]?.message ?? "Invalid download", {
       status: 400,
-      headers: { "Content-Type": "text/plain; charset=utf-8" },
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+      },
     });
   }
 
@@ -32,12 +36,14 @@ export async function GET(request: Request) {
   const file = await buildExpenseExport(rows, filters, {
     loadPhoto: readReceiptImage,
   });
+  const safeFilename = file.filename.replace(/["\r\n\\]/g, "");
 
   return new Response(new Uint8Array(file.body), {
     headers: {
       "Content-Type": file.contentType,
-      "Content-Disposition": `attachment; filename="${file.filename}"`,
+      "Content-Disposition": `attachment; filename="${safeFilename}"`,
       "Cache-Control": "private, no-store",
+      "X-Content-Type-Options": "nosniff",
     },
   });
 }

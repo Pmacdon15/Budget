@@ -43,11 +43,13 @@ export async function GET(request: Request) {
   ];
 
   const body = toCsv(rows);
+  const safeMonth = month.replace(/["\r\n\\]/g, "");
   return new Response(body, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="budget-${month}.csv"`,
+      "Content-Disposition": `attachment; filename="budget-${safeMonth}.csv"`,
       "Cache-Control": "private, no-store",
+      "X-Content-Type-Options": "nosniff",
     },
   });
 }

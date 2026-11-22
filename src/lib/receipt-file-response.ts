@@ -43,7 +43,8 @@ export function contentDisposition(
   type: "attachment" | "inline",
   filename: string,
 ) {
-  return `${type}; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+  const safe = filename.replace(/["\r\n\\]/g, "");
+  return `${type}; filename="${safe}"; filename*=UTF-8''${encodeURIComponent(safe)}`;
 }
 
 export async function receiptFileResponse(
