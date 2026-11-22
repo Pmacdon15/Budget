@@ -51,6 +51,15 @@ export async function POST(request: Request) {
       headers: { "Cache-Control": "private, no-store" },
     });
   } catch (cause) {
+    if (cause instanceof UploadError && cause.status === 429) {
+      return Response.json(
+        { error: cause.message, limited: true },
+        {
+          status: 429,
+          headers: { "Retry-After": String(cause.retryAfterSeconds ?? 60) },
+        },
+      );
+    }
     if (cause instanceof UploadError) return error(cause.message, cause.status);
     console.error("uploading a receipt failed", cause);
     return error("That file couldn't be saved. Try again.", 502);

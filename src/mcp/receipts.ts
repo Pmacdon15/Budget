@@ -1,6 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { claimReceiptScan } from "@/dal/receipt-scans";
+import { claimBlobUpload } from "@/dal/receipt-upload-limits";
 import { selectExpenseById, setExpenseReceipt } from "@/db/expenses";
 import { selectPendingExpense, setPendingReceipt } from "@/db/pending-expenses";
 import {
@@ -53,6 +54,7 @@ import {
   readReceiptFile,
 } from "@/lib/receipt-store";
 import { isReadableText } from "@/lib/receipt-upload";
+import { uploadLimitToolMessage } from "@/lib/receipt-upload-limit";
 
 /*
  * Receipts the AI sends from email: what it read off them, plus a copy to
@@ -228,6 +230,15 @@ export async function storePreparedReceipt(
   prepared: PreparedReceipt,
 ): Promise<ReceiptDetails> {
   const details = { ...prepared.details };
+  // Claimed against the day's upload budget before anything is stored; a
+  // refusal is a tool error, and the caller saves nothing.
+  const bytes = (prepared.image?.length ?? 0) + (prepared.file?.bytes ?? 0);
+  if (bytes > 0) {
+    const claim = await claimBlobUpload(userId, bytes);
+    if (!claim.allowed) {
+      throw new ToolInputError(uploadLimitToolMessage(claim.retryAfterSeconds));
+    }
+  }
   if (prepared.image) {
     details.imagePathname = newReceiptImagePathname(userId);
     await putReceiptImage(

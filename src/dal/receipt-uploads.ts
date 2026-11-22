@@ -1,6 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { claimReceiptScan } from "@/dal/receipt-scans";
+import { claimBlobUpload } from "@/dal/receipt-upload-limits";
 import {
   countExpensesSharingReceipt,
   selectExpenseById,
@@ -50,6 +51,8 @@ export class UploadError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /** For a 429: whole seconds until the user can try again. */
+    readonly retryAfterSeconds?: number,
   ) {
     super(message);
   }
@@ -103,6 +106,40 @@ export async function uploadExpenseReceipt(
     }
   }
 
+  // What goes in the store, worked out first so its size can be claimed
+  // against the day's upload budget before anything is stored or read.
+  const fileKind =
+    kind === "photo"
+      ? null
+      : kind === "pdf"
+        ? "pdf"
+        : kind === "email"
+          ? "email"
+          : "file";
+  const body: Uint8Array<ArrayBuffer> | string =
+    fileKind === "email"
+      ? emailDocument({
+          subject: name?.replace(/\.html?$/i, "") ?? null,
+          from: null,
+          date: null,
+          html,
+          text: null,
+        })
+      : new Uint8Array(upload.bytes);
+  const storedBytes =
+    typeof body === "string" ? Buffer.byteLength(body, "utf8") : body.length;
+
+  // Every upload counts, readable or not, so files the reader can't open
+  // (a .docx, a zip) can't fill the store without limit either.
+  const uploadClaim = await claimBlobUpload(userId, storedBytes);
+  if (!uploadClaim.allowed) {
+    throw new UploadError(
+      uploadClaim.message,
+      429,
+      uploadClaim.retryAfterSeconds,
+    );
+  }
+
   const readable = readableOf(kind, upload, html);
   let reading: ScanResult | null = null;
   let limited: string | undefined;
@@ -129,36 +166,24 @@ export async function uploadExpenseReceipt(
     contentHash: sha256(upload.bytes),
   };
 
-  if (kind === "photo") {
+  if (fileKind === null) {
     details.imagePathname = newReceiptImagePathname(userId);
     await putReceiptImage(
       details.imagePathname,
       new Blob([new Uint8Array(upload.bytes)], { type: IMAGE_CONTENT_TYPE }),
     );
   } else {
-    const fileKind =
-      kind === "pdf" ? "pdf" : kind === "email" ? "email" : "file";
     const contentType =
       fileKind === "pdf"
         ? PDF_CONTENT_TYPE
         : fileKind === "email"
           ? EMAIL_CONTENT_TYPE
           : FILE_CONTENT_TYPE;
-    const body =
-      fileKind === "email"
-        ? emailDocument({
-            subject: name?.replace(/\.html?$/i, "") ?? null,
-            from: null,
-            date: null,
-            html,
-            text: null,
-          })
-        : new Uint8Array(upload.bytes);
     details.fileKind = fileKind;
     details.filePathname = newReceiptFilePathname(userId, fileKind);
     if (fileKind === "email") {
       details.emailSubject = name?.replace(/\.html?$/i, "") ?? null;
-      details.fileBytes = Buffer.byteLength(body as string, "utf8");
+      details.fileBytes = storedBytes;
     }
     await putReceiptFile(
       details.filePathname,

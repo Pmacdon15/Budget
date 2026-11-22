@@ -5,13 +5,15 @@
  * is capped at 1MB, while a Vercel function takes about 4.5MB, so the photo can
  * be posted as binary at a resolution the reader can actually use.
  *
- * Nothing is written to the database here. The response carries the photo's
- * pathname and the suggested fields; the expense form posts the pathname back
- * on save, where the DAL checks it is in the caller's own folder.
+ * Nothing but the scan and upload counts is written to the database here. The
+ * response carries the photo's pathname and the suggested fields; the expense
+ * form posts the pathname back on save, where the DAL checks it is in the
+ * caller's own folder.
  */
 
 import { auth } from "@clerk/nextjs/server";
 import { claimReceiptScan } from "@/dal/receipt-scans";
+import { claimBlobUpload } from "@/dal/receipt-upload-limits";
 import { readReceiptSafely } from "@/lib/receipt-ai";
 import {
   IMAGE_CONTENT_TYPE,
@@ -47,8 +49,12 @@ export async function POST(request: Request) {
   }
 
   // Counted before anything costs money: a refused scan stores nothing and
-  // never reaches the AI.
-  const claim = await claimReceiptScan(userId);
+  // never reaches the AI. The scan limit first, then the day's storage
+  // budget, which every path that stores a file shares.
+  const scanClaim = await claimReceiptScan(userId);
+  const claim = scanClaim.allowed
+    ? await claimBlobUpload(userId, bytes.length)
+    : scanClaim;
   if (!claim.allowed) {
     return Response.json(
       { error: claim.message, limited: true },

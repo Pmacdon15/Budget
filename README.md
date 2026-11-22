@@ -90,6 +90,13 @@ Receipt reading uses Claude through **Vercel AI Gateway**. On Vercel it signs in
 
 With none of these available, scanning still saves the photo and opens an empty form.
 
+Every write to the Blob store (a scanned photo, an uploaded receipt file of any kind, and receipts or statement PDFs sent by AI apps) is first claimed against the user's daily upload budget (`receipt_upload_counts`, one race-safe upsert per upload, per UTC day). Past it, the upload routes answer `429` with `Retry-After` and the MCP tools return a tool error; nothing is stored either way. Optional overrides:
+
+| Variable | Effect |
+| --- | --- |
+| `RECEIPT_UPLOADS_PER_DAY` | Files a user may store per day (default 200) |
+| `RECEIPT_UPLOAD_BYTES_PER_DAY` | Bytes a user may store per day (default 209715200, 200MB) |
+
 The database schema lives in `src/db/schema.sql` and is applied automatically (idempotently) at the start of every build by `scripts/migrate.ts`. It skips itself when `DATABASE_URL` isn't set.
 
 ```bash
